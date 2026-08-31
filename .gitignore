@@ -1,0 +1,8 @@
+.DS_Store
+Thumbs.db
+*.log
+.arena
+.cache
+node_modules
+dist
+.vscode
