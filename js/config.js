@@ -212,6 +212,41 @@ export const ELEMENTS = {
 
 export const ELEMENT_IDS = Object.keys(ELEMENTS);
 
+// Efecto "co-relativo" (correspondiente) de cada naturaleza de chakra.
+// Se aplica al golpear con el jutsu especial y se combina en el ultimátum.
+export const STATUS = {
+  burn: { id: "burn", name: "Quemadura", kana: "火", color: "#ff4d1a", duration: 3, dps: 3 },
+  soak: { id: "soak", name: "Empapado", kana: "水", color: "#3aa0ff", duration: 2.5, slow: 0.72 },
+  shock: { id: "shock", name: "Descarga", kana: "雷", color: "#c9f6ff", duration: 0.6, stun: 0.35 },
+  gust: { id: "gust", name: "Ráfaga", kana: "風", color: "#9cffb0", knock: 1.7 },
+  brittle: { id: "brittle", name: "Fragilidad", kana: "土", color: "#c48a4a", duration: 3, vuln: 1.25 },
+  freeze: { id: "freeze", name: "Congelado", kana: "氷", color: "#b8e7ff", duration: 0.55 },
+  drain: { id: "drain", name: "Absorción", kana: "影", color: "#7a5cff", chakra: 16 },
+  daze: { id: "daze", name: "Aturdido", kana: "音", color: "#e85cff", duration: 3, weaken: 0.7 },
+};
+
+const ELEMENT_STATUS = {
+  fire: "burn",
+  water: "soak",
+  lightning: "shock",
+  wind: "gust",
+  earth: "brittle",
+  ice: "freeze",
+  shadow: "drain",
+  sound: "daze",
+};
+Object.values(ELEMENTS).forEach((e) => {
+  e.status = ELEMENT_STATUS[e.id];
+});
+
+export const PICKUPS = {
+  heal: { id: "heal", name: "Vitalidad", color: "#5dff9f", heal: 25 },
+  chakra: { id: "chakra", name: "Chakra", color: "#3ee0ff", chakra: 40 },
+  power: { id: "power", name: "Poder x1.5", color: "#ff6a2a", buff: { damage: 1.5, time: 8 } },
+  speed: { id: "speed", name: "Velocidad x1.35", color: "#e8c36a", buff: { speed: 1.35, time: 8 } },
+  shield: { id: "shield", name: "Escudo 6s", color: "#c9f6ff", buff: { shield: 6 } },
+};
+
 export function fusionUltimate(a, b) {
   const pair = [a, b].sort().join("+");
   const table = {
@@ -245,13 +280,15 @@ export function fusionUltimate(a, b) {
     "shadow+sound": { name: "Concierto Umbrío", type: "melee", damage: 33, color: "#c090ff" },
   };
   const base = table[pair] || { name: "Jutsu Secreto", type: "melee", damage: 30, color: "#ffe08a" };
-  return { ...base, chakra: 100, cooldown: 8, hitstun: 0.85, ultimate: true };
+  const statuses = [ELEMENT_STATUS[a], ELEMENT_STATUS[b]].filter(Boolean);
+  return { ...base, chakra: 100, cooldown: 8, hitstun: 0.85, ultimate: true, statuses };
 }
 
 export const DEFAULT_APPEARANCE = {
   name: "Boruto-kei",
   gender: "androgynous",
   height: 1,
+  build: "athletic",
   skin: "#f0c7a0",
   faceShape: "sharp",
   eyeStyle: "normal",
@@ -272,6 +309,7 @@ export const DEFAULT_APPEARANCE = {
   pants: "slim",
   shoes: "sneakers",
   cloak: false,
+  scarf: false,
   earrings: true,
   gloves: false,
   goggles: false,
@@ -786,8 +824,8 @@ export function buildLevels() {
           elements: boss.elements,
         },
         stats: {
-          hp: 130 + i * 6,
-          damage: 1.05 + i * 0.025,
+          hp: 120 + i * 5,
+          damage: 1.0 + i * 0.024,
           speed: 1.05,
           ai: "boss",
         },
@@ -817,9 +855,11 @@ export function buildLevels() {
         elements: [e1, e2],
       },
       stats: {
-        hp: 88 + i * 4,
-        damage: 0.85 + i * 0.02,
-        speed: 0.92 + i * 0.008,
+        // Olas de enemigos: más rivales, cada uno con menos vida.
+        hp: 48 + i * 2,
+        damage: 0.8 + i * 0.018,
+        speed: 0.95 + i * 0.006,
+        waves: i <= 8 ? 2 : i <= 18 ? 3 : 4,
         ai: "grunt",
       },
     });
@@ -828,6 +868,64 @@ export function buildLevels() {
 }
 
 export const LEVELS = buildLevels();
+
+// Construye las olas de una misión. Cada misión de campaña se divide en
+// varios enemigos (menos vida cada uno) salvo los jefes, que luchan solos.
+export function buildWaves(level, versus = false) {
+  if (versus) {
+    return [
+      {
+        name: level.name,
+        title: level.title,
+        appearance: level.enemy,
+        hp: level.stats.hp,
+        damage: level.stats.damage,
+        speed: level.stats.speed,
+        ai: level.stats.ai,
+      },
+    ];
+  }
+  if (level.boss) {
+    return [
+      {
+        name: level.name,
+        title: level.title,
+        appearance: level.enemy,
+        hp: level.stats.hp,
+        damage: level.stats.damage,
+        speed: level.stats.speed,
+        ai: "boss",
+      },
+    ];
+  }
+  const count = level.stats.waves || 2;
+  const waves = [];
+  for (let w = 0; w < count; w++) {
+    const preset = PRESETS[Math.floor(seeded(level.id * 13 + w * 3) * PRESETS.length)];
+    const e1 = ELEMENT_IDS[Math.floor(seeded(level.id * 5 + w * 11) * ELEMENT_IDS.length)];
+    let e2 = ELEMENT_IDS[Math.floor(seeded(level.id * 7 + w * 17) * ELEMENT_IDS.length)];
+    if (e2 === e1) e2 = ELEMENT_IDS[(ELEMENT_IDS.indexOf(e1) + 1 + w) % ELEMENT_IDS.length];
+    const name = ENEMY_NAMES[Math.floor(seeded(level.id * 3 + w * 19) * ENEMY_NAMES.length)];
+    waves.push({
+      name,
+      title: `Misión ${String(level.id).padStart(2, "0")}`,
+      appearance: {
+        ...DEFAULT_APPEARANCE,
+        ...preset.appearance,
+        name,
+        hairColor: preset.appearance.hairColor,
+        primaryColor: seeded(level.id + w) > 0.5 ? "#1a2030" : preset.appearance.primaryColor,
+        height: 0.92 + seeded(level.id + w + 5) * 0.14,
+        elements: [e1, e2],
+      },
+      hp: level.stats.hp,
+      damage: level.stats.damage,
+      speed: level.stats.speed,
+      ai: "grunt",
+    });
+  }
+  return waves;
+}
 
 export const DEFAULT_SETTINGS = {
   music: 0.55,
@@ -856,9 +954,9 @@ export const DEFAULT_BINDS = {
 };
 
 export const MOVES = {
-  light: { startup: 0.1, active: 0.09, recovery: 0.16, damage: 6, hitstun: 0.28, blockstun: 0.14, knock: 1.6, range: 1.28, height: 1.15, chip: 1 },
-  heavy: { startup: 0.2, active: 0.12, recovery: 0.28, damage: 11, hitstun: 0.4, blockstun: 0.2, knock: 2.6, range: 1.45, height: 1.2, chip: 2 },
-  kick: { startup: 0.16, active: 0.12, recovery: 0.24, damage: 9, hitstun: 0.34, blockstun: 0.18, knock: 2.8, range: 1.55, height: 0.85, chip: 1.5 },
-  crouchLight: { startup: 0.09, active: 0.08, recovery: 0.14, damage: 5, hitstun: 0.24, blockstun: 0.12, knock: 1.2, range: 1.15, height: 0.7, chip: 1 },
-  airKick: { startup: 0.12, active: 0.16, recovery: 0.18, damage: 8, hitstun: 0.3, blockstun: 0.12, knock: 2.1, range: 1.35, height: 0.9, chip: 1 },
+  light: { startup: 0.08, active: 0.08, recovery: 0.14, damage: 6, hitstun: 0.26, blockstun: 0.13, knock: 1.5, range: 1.3, height: 1.15, chip: 1 },
+  heavy: { startup: 0.18, active: 0.12, recovery: 0.26, damage: 11, hitstun: 0.38, blockstun: 0.19, knock: 2.7, range: 1.48, height: 1.2, chip: 2 },
+  kick: { startup: 0.15, active: 0.12, recovery: 0.22, damage: 9, hitstun: 0.33, blockstun: 0.17, knock: 3.0, range: 1.6, height: 0.85, chip: 1.5 },
+  crouchLight: { startup: 0.08, active: 0.07, recovery: 0.13, damage: 5, hitstun: 0.23, blockstun: 0.11, knock: 1.1, range: 1.18, height: 0.7, chip: 1 },
+  airKick: { startup: 0.1, active: 0.15, recovery: 0.16, damage: 8, hitstun: 0.29, blockstun: 0.11, knock: 2.3, range: 1.38, height: 0.9, chip: 1 },
 };

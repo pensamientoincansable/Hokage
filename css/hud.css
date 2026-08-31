@@ -79,6 +79,47 @@
   right: 2px;
 }
 
+.status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-height: 18px;
+}
+
+.status-row.p2 {
+  justify-content: flex-end;
+}
+
+.st {
+  font-family: Orbitron, sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--stc, #fff);
+  border: 1px solid var(--stc, #fff);
+  background: rgba(0, 0, 0, 0.45);
+  padding: 1px 7px;
+  border-radius: 10px;
+  text-shadow: 0 0 6px var(--stc, transparent);
+  animation: statusIn 0.25s ease;
+}
+
+.st.buff {
+  text-shadow: none;
+}
+
+@keyframes statusIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+.wave-info {
+  color: var(--cyan);
+  font-size: 14px;
+  letter-spacing: 0.2em;
+  margin-top: 2px;
+  min-height: 16px;
+}
+
 .chakra {
   height: 10px;
   background: #071016;
@@ -259,13 +300,15 @@
 .damage-num {
   position: absolute;
   font-family: Teko, sans-serif;
-  font-size: 28px;
+  font-size: 34px;
   color: #fff;
-  text-shadow: 0 0 8px #f00;
+  text-shadow: 0 0 8px #f00, 0 2px 0 #000;
   pointer-events: none;
+  transform: translateX(-50%);
   animation: dmg 0.7s ease forwards;
+  z-index: 12;
 }
 
 @keyframes dmg {
-  to { transform: translateY(-40px); opacity: 0; }
+  to { transform: translateX(-50%) translateY(-46px); opacity: 0; }
 }

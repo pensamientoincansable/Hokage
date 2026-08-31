@@ -23,15 +23,51 @@ export class FX {
     const g = new THREE.Group();
     const core = new THREE.Mesh(
       new THREE.SphereGeometry(size, 12, 10),
-      new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.2, roughness: 0.3 })
+      new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.4, roughness: 0.3 })
     );
+    core.scale.set(1.6, 1, 1);
     const ring = new THREE.Mesh(
       new THREE.TorusGeometry(size * 1.3, 0.04, 8, 16),
       new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.7 })
     );
-    g.add(core, ring);
+    const glow = new THREE.Mesh(
+      new THREE.SphereGeometry(size * 2, 8, 8),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.18 })
+    );
+    g.add(core, ring, glow);
     this.parent.add(g);
     return g;
+  }
+
+  pickupMesh(id, color) {
+    const g = new THREE.Group();
+    const core = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(0.16, 0),
+      new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.9, roughness: 0.3 })
+    );
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.26, 0.03, 8, 20),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8 })
+    );
+    const glow = new THREE.Mesh(
+      new THREE.SphereGeometry(0.34, 8, 8),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.14 })
+    );
+    g.add(core, ring, glow);
+    g.userData.pickup = id;
+    this.parent.add(g);
+    return g;
+  }
+
+  shockwave(x, y, color = "#3ee0ff") {
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.4, 0.05, 8, 28),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9 })
+    );
+    ring.position.set(x, y, 0.2);
+    ring.rotation.x = Math.PI / 2;
+    this.parent.add(ring);
+    this.items.push({ m: ring, v: new THREE.Vector3(), life: 0.45, scale: 22 });
   }
 
   shock(x, y, color) {

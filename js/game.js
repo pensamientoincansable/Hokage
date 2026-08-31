@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import {
-  DEFAULT_APPEARANCE, DEFAULT_SETTINGS, DEFAULT_BINDS, LEVELS, PRESETS, ELEMENT_IDS, ELEMENTS,
+  DEFAULT_APPEARANCE, DEFAULT_SETTINGS, DEFAULT_BINDS, LEVELS, PRESETS, ELEMENT_IDS, ELEMENTS, STATUS, buildWaves,
 } from "./config.js";
 import { loadSave, writeSave, defaultSave } from "./storage.js";
 import { AudioEngine } from "./audio.js";
@@ -41,12 +41,24 @@ export class Game {
     this.level = LEVELS[0];
     this.projMeshes = [];
     this.trapMeshes = [];
+    this.pickupMeshes = [];
+    this.waves = [];
+    this.waveIndex = 0;
+    this.versusMode = false;
+    this.p1Fighter = null;
+    this.interludeTimer = 0;
     this.editorTab = "identidad";
+    this.editorRotY = 0;
+    this.editorDrag = null;
     this.draft = structuredClone(this.save.appearance);
     this.clock = new THREE.Clock();
     this.t = 0;
     this.showcase = new THREE.Group();
     this.renderer.scene.add(this.showcase);
+  }
+
+  isMobile() {
+    return window.innerWidth <= 900;
   }
 
   persist() {
@@ -147,6 +159,24 @@ export class Game {
       this.audio.unlock();
       if (!this.audio.music.playing) this.audio.startMusic(this.mode === "fight" ? "fight" : "menu");
     }, { once: false });
+
+    // Arrastrar para rotar el personaje en el editor (ratón y táctil).
+    window.addEventListener("pointerdown", (e) => {
+      if (this.mode !== "editor") return;
+      const elt = e.target;
+      if (elt && elt.closest && elt.closest(".editor-side, .btn, .chip, .swatch, .tabs, input, select")) return;
+      this.editorDrag = { x: e.clientX, rot: this.editorRotY };
+    });
+    window.addEventListener("pointermove", (e) => {
+      if (!this.editorDrag) return;
+      this.editorRotY = this.editorDrag.rot + (e.clientX - this.editorDrag.x) * 0.008;
+    });
+    window.addEventListener("pointerup", () => {
+      this.editorDrag = null;
+    });
+    window.addEventListener("pointercancel", () => {
+      this.editorDrag = null;
+    });
   }
 
   action(act) {
@@ -175,8 +205,12 @@ export class Game {
       this.persist();
       this.goto("settings");
     }
-    if (act === "resume") this.paused = false, document.getElementById("pause-slot") && (document.getElementById("pause-slot").innerHTML = "");
-    if (act === "restart") this.startLevel(this.level.id);
+    if (act === "resume") {
+      this.paused = false;
+      const slot = document.getElementById("pause-slot");
+      if (slot) slot.innerHTML = "";
+    }
+    if (act === "restart") this.startLevel(this.level.id, this.versusMode);
     if (act === "next") this.startLevel(Math.min(30, this.level.id + 1));
   }
 
@@ -210,6 +244,7 @@ export class Game {
   refreshEditor(rebuildFields = true) {
     this.rebuildPlayer(this.draft);
     this.playerNinja.root.position.set(0, 0, 0);
+    this.playerNinja.root.rotation.y = this.editorRotY;
     if (rebuildFields) this.setEditorTab(this.editorTab);
   }
 
@@ -227,6 +262,7 @@ export class Game {
       UI.mount(this.ui, UI.settingsScreen(this.save.settings, this.save.binds, this.input));
     } else if (screen === "editor") {
       this.draft = structuredClone(this.save.appearance);
+      this.editorRotY = 0;
       UI.mount(this.ui, UI.editorScreen(this.draft));
       this.setEditorTab("identidad");
       this.rebuildPlayer(this.draft);
@@ -245,8 +281,11 @@ export class Game {
   clearFight() {
     this.match = null;
     this.ai = null;
+    this.p1Fighter = null;
     this.projMeshes.forEach((m) => m.parent?.remove(m));
     this.projMeshes = [];
+    this.pickupMeshes.forEach((m) => m.parent?.remove(m));
+    this.pickupMeshes = [];
     if (this.enemyNinja) {
       this.enemyNinja.root.parent?.remove(this.enemyNinja.root);
       disposeNinja(this.enemyNinja);
@@ -254,44 +293,79 @@ export class Game {
     }
   }
 
+  clearEnemy() {
+    if (this.enemyNinja) {
+      this.enemyNinja.root.parent?.remove(this.enemyNinja.root);
+      disposeNinja(this.enemyNinja);
+      this.enemyNinja = null;
+    }
+    this.projMeshes.forEach((m) => m.parent?.remove(m));
+    this.projMeshes = [];
+    this.pickupMeshes.forEach((m) => m.parent?.remove(m));
+    this.pickupMeshes = [];
+  }
+
   async startLevel(id, versus = false) {
     this.level = LEVELS[id - 1];
     if (!this.level) return;
     if (!versus && id > this.save.unlocked) return;
+    this.versusMode = versus;
+    this.waves = buildWaves(this.level, versus);
+    this.waveIndex = 0;
+    this.p1Fighter = null;
     this.mode = "intro";
     this.audio.startMusic("fight");
     const intro = UI.vsIntro(this.save.appearance.name, {
       ...this.level,
       playerElems: this.save.appearance.elements.map((e) => ELEMENTS[e].name),
+      waveCount: this.waves.length,
+      versus,
     });
     UI.mount(this.ui, intro);
     this.stage.build(this.level.stage);
     this.fx = new FX(this.stage.fx);
     this.rebuildPlayer(this.save.appearance);
-    this.enemyNinja = createNinja(this.level.enemy);
-    this.renderer.scene.add(this.enemyNinja.root);
     await new Promise((r) => setTimeout(r, 1800));
     if (this.mode !== "intro") return;
-    this.beginMatch();
+    this.beginWave(0);
   }
 
-  beginMatch() {
+  beginWave(i) {
+    this.waveIndex = i;
+    const wave = this.waves[i];
+    if (!wave) return;
     this.mode = "fight";
-    const p1 = new Fighter(this.playerNinja, 1, { hp: 110, damage: 1, speed: 1 });
-    const diff = this.save.settings.difficulty;
-    const p2 = new Fighter(this.enemyNinja, 2, {
-      hp: this.level.stats.hp,
-      damage: this.level.stats.damage,
-      speed: this.level.stats.speed,
-    });
+    this.interludeTimer = 0;
+    this.clearEnemy();
+    this.enemyNinja = createNinja(wave.appearance);
+    this.renderer.scene.add(this.enemyNinja.root);
+
+    if (!this.p1Fighter) {
+      this.p1Fighter = new Fighter(this.playerNinja, 1, { hp: 120, damage: 1, speed: 1 });
+    }
+    const p1 = this.p1Fighter;
+    p1.x = -3.2; p1.y = 0; p1.z = 0; p1.vx = 0; p1.vy = 0; p1.facing = 1;
+    p1.state = "idle"; p1.timer = 0; p1.animLock = 0; p1.hitstun = 0; p1.blockstun = 0;
+    p1.invuln = 0; p1.freeze = 0; p1.flash = 0; p1.coyote = 0; p1.jumpBuffer = 0; p1.walkDir = 0;
+    p1.cd = { special1: 0, special2: 0, ultimate: 0 };
+    p1.statuses = [];
+    p1.move = null; p1.attackHit = false; p1.alive = true; p1.crouch = false; p1.blocking = false;
+    p1.pendingSpec = null;
+    p1.ninja.animator.state = "idle";
+    p1.ninja.animator.t = 0;
+    p1.ninja.animator.lock = 0;
+    p1.sync();
+
+    const p2 = new Fighter(this.enemyNinja, 2, { hp: wave.hp, damage: wave.damage, speed: wave.speed });
     this.match = new Match(p1, p2, {
       time: 99,
       onEvent: (ev) => this.onCombatEvent(ev),
+      pickupCollector: p1,
     });
-    p1.sync();
     p2.sync();
-    this.ai = new AIController(p2, this.match, diff, this.level.stats.ai);
-    UI.mount(this.ui, UI.hud(p1, p2, this.level));
+    const diff = this.save.settings.difficulty;
+    this.ai = new AIController(p2, this.match, diff, wave.ai);
+    UI.mount(this.ui, UI.hud(p1, p2, { ...this.level, wave, waveIndex: i, waveCount: this.waves.length, versus: this.versusMode }));
     const help = document.getElementById("help");
     if (help && !this.save.settings.showHints) help.style.display = "none";
     const touch = UI.touchLayer();
@@ -301,7 +375,8 @@ export class Game {
     const p2el = document.getElementById("p2-el");
     if (p1el) p1el.textContent = p1.elements.map((e) => ELEMENTS[e].kana).join(" ");
     if (p2el) p2el.textContent = p2.elements.map((e) => ELEMENTS[e].kana).join(" ");
-    this.announce("FIGHT");
+    this.announce(this.waves.length > 1 ? `OLEADA ${i + 1}` : "FIGHT");
+    this.syncPickups();
   }
 
   announce(text) {
@@ -313,41 +388,100 @@ export class Game {
     n.classList.add("pop");
   }
 
+  spawnDamage(f, amount, color) {
+    const hud = document.getElementById("hud");
+    if (!hud || !this.match) return;
+    const isP1 = f === this.match.p1;
+    const n = document.createElement("div");
+    n.className = "damage-num";
+    n.textContent = Math.round(amount);
+    n.style.left = isP1 ? "30%" : "70%";
+    n.style.top = "24%";
+    if (color) n.style.textShadow = `0 0 8px ${color}, 0 2px 0 #000`;
+    hud.appendChild(n);
+    setTimeout(() => n.remove(), 700);
+  }
+
   onCombatEvent(ev) {
     if (ev.type === "hit") {
       this.audio.sfx("hit");
       this.fx?.burst(ev.x, ev.y, 0, "#ffe08a", 14, 5);
       this.renderer.shake = this.match.shake;
-    } else if (ev.type === "block") this.audio.sfx("block");
-    else if (ev.type === "jump") this.audio.sfx("jump");
-    else if (ev.type === "special") {
+      this.spawnDamage(ev.def, ev.damage);
+    } else if (ev.type === "block") {
+      this.audio.sfx("block");
+      this.spawnDamage(ev.def, 0, "#8ab4ff");
+    } else if (ev.type === "jump") {
+      this.audio.sfx("jump");
+    } else if (ev.type === "special") {
       this.audio.sfx(ev.spec.ultimate ? "ultimate" : "whoosh");
-      if (ev.spec.ultimate) this.announce(ev.spec.name);
+      if (ev.spec.ultimate) {
+        this.announce(ev.spec.name);
+        this.fx?.shockwave(ev.fighter.x, 0.1, ev.spec.color);
+      }
+    } else if (ev.type === "pickup") {
+      this.audio.sfx(ev.pickup.heal ? "heal" : "pickup");
+      UI.toast(`${ev.pickup.name} +`);
     } else if (ev.type === "ko") {
       this.audio.sfx("ko");
       this.announce("K.O.");
-      setTimeout(() => this.endMatch(ev.winner === this.match.p1), 1400);
+      this.handleResult(ev.winner === this.match.p1);
     } else if (ev.type === "timeout") {
       this.announce("TIME");
-      setTimeout(() => this.endMatch(ev.winner === this.match.p1), 1000);
+      this.handleResult(ev.winner === this.match.p1);
     }
   }
 
-  endMatch(win) {
-    if (this.mode !== "fight") return;
-    this.mode = "result";
-    if (win) {
-      this.audio.sfx("win");
+  dropRewards(x) {
+    if (!this.match) return;
+    this.match.spawnPickup("chakra", x + 0.5);
+    if (Math.random() < 0.7) this.match.spawnPickup("heal", x - 0.5);
+    const buffs = ["power", "speed", "shield"];
+    if (Math.random() < 0.3) this.match.spawnPickup(buffs[Math.floor(Math.random() * buffs.length)], x + 1.3);
+  }
+
+  handleResult(playerWon) {
+    if (this.mode === "result" || this.mode === "interlude") return;
+    if (this.versusMode) {
+      if (playerWon) this.save.vsWins++;
+      else this.save.vsLosses++;
+      this.persist();
+      this.mode = "result";
+      this.showResult(playerWon);
+      return;
+    }
+    // Campaña.
+    if (playerWon) {
+      if (this.waveIndex + 1 < this.waves.length) {
+        this.dropRewards(this.match.p2.x);
+        this.mode = "interlude";
+        this.match.interlude = true;
+        this.interludeTimer = 2.6;
+        this.announce("¡OLEADA SUPERADA!");
+        this.audio.sfx("win");
+        return;
+      }
+      // Misión completa.
       if (!this.save.completed.includes(this.level.id)) this.save.completed.push(this.level.id);
       this.save.unlocked = Math.max(this.save.unlocked, Math.min(30, this.level.id + 1));
       this.save.vsWins++;
       this.persist();
-    } else this.save.vsLosses++;
-    const slot = document.getElementById("result-slot");
-    if (slot) {
-      slot.innerHTML = "";
-      slot.appendChild(UI.resultScreen(win, this.level));
+      this.mode = "result";
+      this.audio.sfx("win");
+      this.showResult(true);
+    } else {
+      this.save.vsLosses++;
+      this.persist();
+      this.mode = "result";
+      this.showResult(false);
     }
+  }
+
+  showResult(win) {
+    const slot = document.getElementById("result-slot");
+    if (!slot) return;
+    slot.innerHTML = "";
+    slot.appendChild(UI.resultScreen(win, this.level, this.versusMode));
   }
 
   playerInput() {
@@ -355,6 +489,8 @@ export class Game {
     return {
       axis: this.input.axis(),
       jump: this.input.wasPressed("up"),
+      up: this.input.isDown("up"),
+      upReleased: this.input.wasReleased("up"),
       down: this.input.isDown("down"),
       light: this.input.wasPressed("light"),
       heavy: this.input.wasPressed("heavy"),
@@ -391,6 +527,25 @@ export class Game {
         c.innerHTML = `${this.match.combo} <small>${this.match.comboRank}</small>`;
       } else c.classList.remove("show");
     }
+    const w = document.getElementById("wave-info");
+    if (w && this.waves.length > 1) w.textContent = `Oleada ${this.waveIndex + 1}/${this.waves.length}`;
+    this.renderStatus("p1", p1);
+    this.renderStatus("p2", p2);
+  }
+
+  renderStatus(prefix, f) {
+    const box = document.getElementById(prefix + "-status");
+    if (!box) return;
+    const parts = [];
+    f.statuses.forEach((s) => {
+      if (s.until <= 0) return;
+      const st = STATUS[s.id];
+      if (st) parts.push(`<span class="st" style="--stc:${st.color}">${st.name}</span>`);
+    });
+    if (f.buffs.shield > 0) parts.push(`<span class="st buff" style="--stc:#c9f6ff">ESCUDO</span>`);
+    if (f.buffs.damage > 0) parts.push(`<span class="st buff" style="--stc:#ff6a2a">PODER</span>`);
+    if (f.buffs.speed > 0) parts.push(`<span class="st buff" style="--stc:#e8c36a">VELOCIDAD</span>`);
+    box.innerHTML = parts.join("");
   }
 
   syncProjectiles() {
@@ -404,13 +559,37 @@ export class Game {
       m.parent?.remove(m);
     }
     this.match.projectiles.forEach((p, i) => {
-      this.projMeshes[i].position.set(p.x, p.y, 0);
+      const m = this.projMeshes[i];
+      m.position.set(p.x, p.y, 0);
+      m.rotation.y = p.vx > 0 ? -Math.PI / 2 : Math.PI / 2;
     });
     this.match.traps.forEach((t) => {
       if (!t.mesh) {
         t.mesh = true;
         this.fx.shock(t.x, 0.1, t.color || "#c48a4a");
       }
+    });
+  }
+
+  syncPickups() {
+    if (!this.match || !this.fx) {
+      this.pickupMeshes.forEach((m) => m.parent?.remove(m));
+      this.pickupMeshes = [];
+      return;
+    }
+    const keys = this.match.pickups;
+    while (this.pickupMeshes.length < keys.length) {
+      const p = keys[this.pickupMeshes.length];
+      this.pickupMeshes.push(this.fx.pickupMesh(p.id, p.color));
+    }
+    while (this.pickupMeshes.length > keys.length) {
+      const m = this.pickupMeshes.pop();
+      m.parent?.remove(m);
+    }
+    keys.forEach((p, i) => {
+      const m = this.pickupMeshes[i];
+      m.position.set(p.x, p.y + Math.sin(p.bob * 3) * 0.12, 0);
+      m.rotation.y += 0.03;
     });
   }
 
@@ -421,7 +600,7 @@ export class Game {
     this.stage.update(dt);
     this.fx?.update(dt);
 
-    if (this.mode === "menu" || this.mode === "credits" || this.mode === "campaign" || this.mode === "versus") {
+    if (this.mode === "menu" || this.mode === "credits" || this.mode === "campaign") {
       this.renderer.showcaseCam(this.t);
       if (this.playerNinja) {
         this.playerNinja.root.position.set(Math.sin(this.t * 0.2) * 0.2, 0, 0);
@@ -433,12 +612,13 @@ export class Game {
     } else if (this.mode === "editor") {
       this.renderer.editorCam();
       if (this.playerNinja) {
-        this.playerNinja.root.rotation.y += dt * 0.35;
+        if (!this.editorDrag) this.editorRotY += dt * 0.35;
+        this.playerNinja.root.rotation.y = this.editorRotY;
         this.playerNinja.update(dt, {});
       }
     } else if (this.mode === "intro") {
       this.renderer.follow(-3, 3, dt);
-    } else if (this.mode === "fight" || this.mode === "result") {
+    } else if (this.mode === "fight" || this.mode === "interlude" || this.mode === "result") {
       if (this.mode === "fight" && this.match) {
         if (this.paused) {
           if (this.input.wasPressed("pause")) this.action("resume");
@@ -454,7 +634,18 @@ export class Game {
           this.match.control(this.match.p2, this.ai.input(dt), dt);
           this.match.update(dt);
           this.syncProjectiles();
+          this.syncPickups();
           this.updateHud();
+        }
+      } else if (this.mode === "interlude" && this.match) {
+        this.match.control(this.match.p1, this.playerInput(), dt);
+        this.match.update(dt);
+        this.syncProjectiles();
+        this.syncPickups();
+        this.updateHud();
+        this.interludeTimer -= dt;
+        if (this.interludeTimer <= 0) {
+          this.beginWave(this.waveIndex + 1);
         }
       }
       if (this.match) this.renderer.follow(this.match.p1.x, this.match.p2.x, dt);

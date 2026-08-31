@@ -60,6 +60,11 @@ export class Input {
     return this.pressed.has(this.binds[action]);
   }
 
+  wasReleased(action) {
+    if (this.touchReleased?.[action]) return true;
+    return this.released.has(this.binds[action]);
+  }
+
   axis() {
     let x = 0;
     if (this.isDown("left")) x -= 1;
@@ -84,6 +89,7 @@ export class Input {
     this.pressed.clear();
     this.released.clear();
     this.touchPressed = {};
+    this.touchReleased = {};
   }
 
   label(action) {
@@ -100,6 +106,9 @@ export class Input {
         if (v) {
           this.touchPressed = this.touchPressed || {};
           this.touchPressed[act] = true;
+        } else {
+          this.touchReleased = this.touchReleased || {};
+          this.touchReleased[act] = true;
         }
       };
       el.addEventListener("pointerdown", (e) => { e.preventDefault(); set(true); });
