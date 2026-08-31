@@ -73,8 +73,14 @@ export class Renderer {
   }
 
   editorCam() {
-    this.camera.position.set(1.4, 1.5, 3.6);
-    this.camera.lookAt(0, 1.05, 0);
+    if (window.innerWidth <= 900) {
+      // En móvil el panel ocupa la mitad inferior: encuadra al shinobi arriba.
+      this.camera.position.set(0.9, 1.5, 5.0);
+      this.camera.lookAt(0, 0.05, 0);
+    } else {
+      this.camera.position.set(1.4, 1.5, 3.6);
+      this.camera.lookAt(0, 1.05, 0);
+    }
   }
 
   render() {

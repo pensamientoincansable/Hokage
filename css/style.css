@@ -427,17 +427,25 @@ input[type="color"] {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+  margin-bottom: 10px;
 }
 
 .swatch {
-  width: 22px;
-  height: 22px;
-  border: 2px solid #000;
+  width: 26px;
+  height: 26px;
+  border: 2px solid rgba(0, 0, 0, 0.7);
+  border-radius: 6px;
   cursor: pointer;
+  transition: 0.12s ease;
+}
+
+.swatch:hover {
+  transform: scale(1.15);
 }
 
 .swatch.on {
   outline: 2px solid var(--gold);
+  outline-offset: 2px;
 }
 
 .preset-grid {
@@ -615,17 +623,50 @@ kbd.listen {
   z-index: 8;
 }
 
+.touch-group {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  pointer-events: none;
+  height: 210px;
+}
+
+.touch-group.actions {
+  left: auto;
+  width: 300px;
+}
+
 .touch-btn {
   pointer-events: auto;
   position: absolute;
-  width: 64px;
-  height: 64px;
+  width: 62px;
+  height: 62px;
   border-radius: 50%;
   border: 1px solid var(--line);
-  background: rgba(10, 12, 20, 0.55);
+  background: rgba(10, 12, 20, 0.6);
   color: var(--gold);
   font-family: Orbitron, sans-serif;
-  font-size: 11px;
+  font-size: 12px;
+  backdrop-filter: blur(4px);
+  touch-action: manipulation;
+}
+
+.touch-btn:active {
+  background: rgba(232, 195, 106, 0.3);
+  transform: scale(0.92);
+}
+
+.touch-btn.small {
+  width: 52px;
+  height: 52px;
+  font-size: 10px;
+}
+
+.touch-btn.ult {
+  border-color: var(--crimson);
+  color: #fff;
+  background: rgba(200, 30, 58, 0.55);
 }
 
 @media (min-width: 901px) {
@@ -635,6 +676,32 @@ kbd.listen {
 @media (max-width: 900px) {
   #menu { padding: 20px; }
   .menu-nav .btn { min-width: 0; width: 100%; }
-  .editor-grid { grid-template-columns: 1fr; }
   .sheet { padding: 16px; }
+
+  /* Editor móvil: vista previa 3D arriba, panel de controles abajo. */
+  #editor {
+    padding: 0;
+    background: linear-gradient(180deg, rgba(5, 6, 10, 0) 0%, rgba(5, 6, 10, 0.72) 46%);
+  }
+  .editor-grid {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    height: 100%;
+    gap: 0;
+  }
+  .editor-side {
+    width: 100%;
+    max-height: 58%;
+    margin-top: auto;
+    border-radius: 14px 14px 0 0;
+    border-bottom: none;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+  .editor-hint {
+    display: none;
+  }
+  .preset-grid {
+    grid-template-columns: 1fr 1fr;
+  }
 }

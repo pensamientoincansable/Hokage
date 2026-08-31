@@ -11,6 +11,7 @@ export class AudioEngine {
   unlock() {
     if (this.ctx) return;
     const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return; // Sin Web Audio disponible: el juego sigue funcionando en silencio.
     this.ctx = new Ctx();
     this.master = this.ctx.createGain();
     this.musicGain = this.ctx.createGain();
@@ -85,6 +86,8 @@ export class AudioEngine {
       ui: () => this.tone(660, 0.05, "square", 0.03),
       win: () => { this.tone(440, 0.12); setTimeout(() => this.tone(660, 0.12), 120); setTimeout(() => this.tone(880, 0.2), 240); },
       jump: () => this.tone(380, 0.1, "sine", 0.03),
+      pickup: () => { this.tone(520, 0.06, "square", 0.04); setTimeout(() => this.tone(780, 0.08, "square", 0.04), 60); },
+      heal: () => { this.tone(392, 0.09, "triangle", 0.05); setTimeout(() => this.tone(523, 0.09, "triangle", 0.05), 90); setTimeout(() => this.tone(659, 0.12, "triangle", 0.05), 180); },
     };
     (map[name] || map.ui)();
   }
