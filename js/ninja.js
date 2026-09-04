@@ -1,5 +1,46 @@
 import * as THREE from "three";
 import { ELEMENTS } from "./config.js";
+import { ColladaLoader } from "three/addons/loaders/ColladaLoader.js";
+import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
+
+// ---------------------------------------------------------------------------
+// NARUTO MODEL — skinned character loaded from Naruto/model.dae.
+//
+// The procedural ninja is kept as a fallback (createProceduralNinja) so the
+// game never breaks if the model cannot be fetched/parsed. Once loaded, every
+// ninja (player, enemies, bosses) is a cloned instance of the imported skinned
+// model, animated through its MMD-style skeleton.
+// ---------------------------------------------------------------------------
+
+let template = null; // { scene, modelGroup, bones, rest } — built once.
+let loadPromise = null;
+
+const HEIGHT_SCALE = 1.9; // target total height (game units) of the imported model.
+
+// Bones we animate, and their neutral/rest offset.
+const ANIM_BONES = {
+  hip: "hip",
+  waist: "waist",
+  neck: "neck",
+  head: "head",
+  rUpper: "R_harm",
+  rFore: "R_larm",
+  lUpper: "L_harm",
+  lFore: "L_larm",
+  rThigh: "R_hleg",
+  rShin: "R_lleg",
+  lThigh: "L_hleg",
+  lShin: "L_lleg",
+};
+
+// Base pose (T-pose -> fighting stance). Values are model-local eulers
+// (radians) about the model's axes: +Y up, +Z forward (the face).
+const BASE_POSE = {
+  rUpper: [0, 0, 1.35],
+  lUpper: [0, 0, -1.35],
+  rFore: [-0.6, 0, 0],
+  lFore: [-0.6, 0, 0],
+};
 
 function mat(color, extra = {}) {
   return new THREE.MeshStandardMaterial({
@@ -20,6 +61,352 @@ function mesh(geo, material, x = 0, y = 0, z = 0) {
   m.receiveShadow = true;
   return m;
 }
+
+// ---------------------------------------------------------------------------
+// Loading + normalization of the Naruto model.
+// ---------------------------------------------------------------------------
+export async function loadNinjaModel() {
+  if (template) return template;
+  if (loadPromise) return loadPromise;
+  loadPromise = (async () => {
+    const loader = new ColladaLoader();
+    let collada;
+    try {
+      collada = await loader.loadAsync("Naruto/model.dae");
+    } catch (err) {
+      console.warn("Could not load the Naruto model, using procedural ninja:", err);
+      return null;
+    }
+    const scene = collada.scene;
+
+    // Normalize: centre on origin, feet at y = 0, scale to ~1.9 units tall.
+    const box = new THREE.Box3().setFromObject(scene);
+    const size = box.getSize(new THREE.Vector3());
+    const scale = HEIGHT_SCALE / Math.max(0.001, size.y);
+    scene.position.set(
+      -(box.min.x + box.max.x) / 2,
+      -box.min.y,
+      -(box.min.z + box.max.z) / 2
+    );
+
+    const modelGroup = new THREE.Group();
+    modelGroup.scale.setScalar(scale);
+    modelGroup.add(scene);
+
+    // Cache bind (rest) quaternions for the bones we animate.
+    const bones = {};
+    const rest = {};
+    scene.updateMatrixWorld(true);
+    for (const key of Object.keys(ANIM_BONES)) {
+      const name = ANIM_BONES[key];
+      const b = scene.getObjectByName(name);
+      if (b) {
+        bones[key] = b;
+        rest[name] = b.quaternion.clone();
+      }
+    }
+
+    template = { scene, modelGroup, bones, rest, scale };
+    return template;
+  })();
+  return loadPromise;
+}
+
+function modelReady() {
+  return !!template;
+}
+
+// ---------------------------------------------------------------------------
+// Model-based ninja (skinned Naruto mesh).
+// ---------------------------------------------------------------------------
+function createModelNinja(appearance) {
+  const a = appearance;
+  const root = new THREE.Group();
+  const modelGroup = cloneSkeleton(template.modelGroup);
+  const height = a.height || 1;
+  modelGroup.scale.setScalar(template.scale * height);
+  root.add(modelGroup);
+
+  // Fresh materials per instance + palette tinting.
+  const white = new THREE.Color(0xffffff);
+  const skin = new THREE.Color(a.skin || "#f0c7a0");
+  const primary = new THREE.Color(a.primaryColor || "#2b3548");
+  const secondary = new THREE.Color(a.secondaryColor || "#e8c36a");
+  modelGroup.traverse((o) => {
+    if (!o.isMesh) return;
+    o.castShadow = true;
+    o.receiveShadow = true;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    const next = mats.map((m) => {
+      const nm = m.clone();
+      const region = materialRegion(m.name);
+      if (region === "skin") nm.color.copy(white).lerp(skin, 0.5);
+      else if (region === "primary") nm.color.copy(white).lerp(primary, 0.6);
+      else if (region === "secondary") nm.color.copy(white).lerp(secondary, 0.6);
+      nm.emissive = new THREE.Color(0x000000);
+      nm.emissiveIntensity = 0;
+      return nm;
+    });
+    o.material = next.length === 1 ? next[0] : next;
+  });
+
+  // Element aura rings (kept from the procedural design).
+  const el = ELEMENTS[a.elements?.[0]] || ELEMENTS.fire;
+  const el2 = ELEMENTS[a.elements?.[1]] || ELEMENTS.wind;
+  const aura = mesh(
+    new THREE.TorusGeometry(0.5, 0.016, 8, 28),
+    mat(el.color, { emissive: el.color, emissiveIntensity: 0.7, transparent: true, opacity: 0.0 }),
+    0, 0.02, 0
+  );
+  aura.rotation.x = Math.PI / 2;
+  root.add(aura);
+  const aura2 = mesh(
+    new THREE.TorusGeometry(0.36, 0.012, 8, 24),
+    mat(el2.color, { emissive: el2.color, emissiveIntensity: 0.7, transparent: true, opacity: 0.0 }),
+    0, 0.02, 0
+  );
+  aura2.rotation.x = Math.PI / 2;
+  root.add(aura2);
+
+  // Build the bone map for this instance.
+  const bones = {};
+  const rest = template.rest;
+  for (const key of Object.keys(ANIM_BONES)) {
+    const name = ANIM_BONES[key];
+    const b = modelGroup.getObjectByName(name);
+    if (b) bones[key] = b;
+  }
+
+  const rig = { modelGroup, bones, rest };
+  const animator = new ModelAnimator(rig, aura, aura2);
+  const parts = {
+    root,
+    hips: bones.hip,
+    torso: bones.waist,
+    head: bones.head,
+    lArm: bones.lUpper,
+    rArm: bones.rUpper,
+    lLeg: bones.lThigh,
+    rLeg: bones.rThigh,
+    aura,
+    aura2,
+  };
+  return { root, parts, animator, appearance: a, modelBased: true, update: (dt, st) => animator.update(dt, st) };
+}
+
+function materialRegion(matName) {
+  const m = /Material_(\d+)$/.exec(matName || "");
+  const n = m ? Number(m[1]) : -1;
+  if (n === 0 || n === 1) return "skin"; // face + body skin
+  if (n === 3 || n === 5) return "primary"; // orange suit
+  if ([2, 4, 6, 7, 8, 9, 10, 13].includes(n)) return "secondary"; // navy trim
+  return "other";
+}
+
+// ---------------------------------------------------------------------------
+// Skeleton animator — drives the MMD bones to match the game's move states.
+// ---------------------------------------------------------------------------
+class ModelAnimator {
+  constructor(rig, aura, aura2) {
+    this.rig = rig;
+    this.aura = aura;
+    this.aura2 = aura2;
+    this.state = "idle";
+    this.t = 0;
+    this.lock = 0;
+    this.flash = 0;
+    this.pose = {};
+    this._q1 = new THREE.Quaternion();
+    this._q2 = new THREE.Quaternion();
+    this._q3 = new THREE.Quaternion();
+    this._q4 = new THREE.Quaternion();
+    this._q5 = new THREE.Quaternion();
+    this._q6 = new THREE.Quaternion();
+    this._q7 = new THREE.Quaternion();
+    this._e = new THREE.Euler();
+  }
+
+  play(name, lock = 0) {
+    if (this.t < this.lock && !["hurt", "ko", "win"].includes(name)) return;
+    this.state = name;
+    this.t = 0;
+    this.lock = lock;
+  }
+
+  applyBone(b, euler) {
+    const qModel = this._q1.setFromEuler(this._e.set(euler[0], euler[1], euler[2], "XYZ"));
+    const modelQ = this.rig.modelGroup.getWorldQuaternion(this._q2);
+    const parentQ = b.parent.getWorldQuaternion(this._q3);
+    const restWorld = this._q4.copy(parentQ).multiply(this.rig.rest[b.name]);
+    // Convert the model-space rotation into world space, then back into the
+    // bone's local frame relative to its (possibly animated) parent.
+    const qWorldRot = this._q5.copy(modelQ).multiply(qModel).multiply(this._q6.copy(modelQ).invert());
+    const newWorld = this._q7.copy(qWorldRot).multiply(restWorld);
+    b.quaternion.copy(this._q6.copy(parentQ).invert().multiply(newWorld));
+  }
+
+  applyPose() {
+    const P = this.pose;
+    const order = [
+      "hip", "waist", "neck", "head",
+      "rUpper", "rFore", "lUpper", "lFore",
+      "rThigh", "rShin", "lThigh", "lShin",
+    ];
+    for (const key of order) {
+      const b = this.rig.bones[key];
+      if (!b) continue;
+      this.applyBone(b, P[key] || BASE_POSE[key] || [0, 0, 0]);
+    }
+  }
+
+  update(dt, st = {}) {
+    this.t += dt;
+    const t = this.t;
+    const s = this.state;
+    const P = this.pose;
+    const bob = Math.sin(t * 4) * 0.015;
+    const body = this.rig.modelGroup;
+
+    for (const k in BASE_POSE) P[k] = BASE_POSE[k].slice();
+    body.position.y = 0;
+
+    if (s === "idle") {
+      P.rUpper[0] += 0.08 + bob * 2;
+      P.lUpper[0] += 0.08 - bob * 2;
+      P.waist = [Math.sin(t * 1.2) * 0.03, 0, 0];
+      P.head = [Math.sin(t * 1.2 + 1) * 0.03, 0, 0];
+    } else if (s === "walk") {
+      const w = Math.sin(t * 11);
+      P.rThigh = [-w * 0.55, 0, 0];
+      P.lThigh = [w * 0.55, 0, 0];
+      P.rUpper[0] += w * 0.25;
+      P.lUpper[0] -= w * 0.25;
+      P.waist = [-0.12, 0, 0];
+      body.position.y = Math.abs(w) * 0.03;
+    } else if (s === "jump") {
+      P.rUpper = [0, 0, 0.7];
+      P.lUpper = [0, 0, -0.7];
+      P.rFore = [-0.4, 0, 0];
+      P.lFore = [-0.4, 0, 0];
+      P.rThigh = [-0.35, 0, 0];
+      P.rShin = [-0.5, 0, 0];
+      P.lThigh = [-0.25, 0, 0];
+      P.lShin = [-0.5, 0, 0];
+    } else if (s === "crouch") {
+      body.position.y = -0.18;
+      P.rThigh = [0.55, 0, 0];
+      P.lThigh = [0.55, 0, 0];
+      P.rShin = [-0.75, 0, 0];
+      P.lShin = [-0.75, 0, 0];
+      P.waist = [-0.15, 0, 0];
+    } else if (s === "block") {
+      P.rUpper = [0, 0, 1.1];
+      P.lUpper = [0, 0, -1.1];
+      P.rFore = [-1.6, 0, 0];
+      P.lFore = [-1.6, 0, 0];
+      P.waist = [0.1, 0, 0];
+    } else if (s === "light" || s === "crouchLight") {
+      const k = Math.min(1, t / 0.12);
+      P.rUpper = [-0.9 * k, 0, 1.35];
+      P.rFore = [-0.6 - 0.6 * k, 0, 0];
+      P.waist = [-0.15 * k, 0, 0];
+    } else if (s === "heavy") {
+      const k = Math.min(1, t / 0.22);
+      P.rUpper = [-1.4 * k, 0, 1.35];
+      P.rFore = [-0.6 + 0.5 * k, 0, 0];
+      P.waist = [-0.22 * k, 0, 0];
+    } else if (s === "kick" || s === "airKick") {
+      const k = Math.min(1, t / 0.16);
+      P.rThigh = [-0.8 * k, 0, 0];
+      P.rShin = [0.15 * k, 0, 0];
+      P.rUpper[0] += 0.35 * k;
+      P.lUpper[0] += 0.35 * k;
+      P.waist = [0.15 * k, 0, 0];
+    } else if (s === "special" || s === "ultimate") {
+      const k = Math.sin(Math.min(1, t / 0.25) * Math.PI);
+      P.rUpper = [-1.0 * k, 0, 1.0];
+      P.lUpper = [-1.0 * k, 0, -1.0];
+      P.rFore = [-1.0 * k, 0, 0];
+      P.lFore = [-1.0 * k, 0, 0];
+      P.waist = [-0.15 * k, 0, 0];
+    } else if (s === "hurt") {
+      P.waist = [0.45, 0, 0];
+      P.neck = [0.3, 0, 0];
+      P.rUpper = [0.5, 0, 0.8];
+      P.lUpper = [0.5, 0, -0.8];
+    } else if (s === "ko") {
+      body.position.y = -0.5;
+      P.hip = [Math.min(1.3, t * 3), 0, 0];
+      P.neck = [0.4, 0, 0];
+    } else if (s === "win") {
+      P.rUpper = [-1.4, 0, 1.0];
+      P.neck = [-0.2, 0, 0];
+      P.waist = [Math.sin(t * 3) * 0.05, 0, 0];
+    } else if (s === "dash") {
+      P.waist = [-0.45, 0, 0];
+      P.rUpper = [0.5, 0, 1.35];
+      P.lUpper = [0.5, 0, -1.35];
+    }
+
+    this.applyPose();
+
+    // Aura rings.
+    const on = s === "special" || s === "ultimate";
+    const ta = on ? 0.9 : 0;
+    this.aura.material.opacity = THREE.MathUtils.lerp(this.aura.material.opacity, ta, dt * 6);
+    this.aura2.material.opacity = THREE.MathUtils.lerp(this.aura2.material.opacity, on ? 0.75 : 0, dt * 6);
+    this.aura.rotation.z += dt * 2;
+    this.aura2.rotation.z -= dt * 2.6;
+
+    // Hit flash.
+    if (st.flash) this.flash = 0.12;
+    if (this.flash > 0) {
+      this.flash -= dt;
+      this.rig.modelGroup.traverse((o) => {
+        if (o.isMesh && o.material) {
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          mats.forEach((m) => {
+            if (m.emissive) {
+              m.emissive.setHex(0xffffff);
+              m.emissiveIntensity = 0.35;
+            }
+          });
+        }
+      });
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Public factory.
+// ---------------------------------------------------------------------------
+export function createNinja(appearance) {
+  if (modelReady()) {
+    try {
+      return createModelNinja(appearance);
+    } catch (err) {
+      console.warn("Falling back to procedural ninja:", err);
+    }
+  }
+  return createProceduralNinja(appearance);
+}
+
+export function disposeNinja(ninja) {
+  if (!ninja) return;
+  ninja.root?.traverse((o) => {
+    if (o.isMesh) {
+      if (!ninja.modelBased && o.geometry) o.geometry.dispose();
+      if (o.material) {
+        if (Array.isArray(o.material)) o.material.forEach((m) => m.dispose());
+        else o.material.dispose();
+      }
+    }
+  });
+}
+
+// ===========================================================================
+// PROCEDURAL NINJA (fallback) — original implementation, kept intact.
+// ===========================================================================
 
 function villageCanvas(symbol, bg, fg) {
   const c = document.createElement("canvas");
@@ -309,7 +696,7 @@ function makeMarkings(kind, color) {
   return g;
 }
 
-export function createNinja(appearance) {
+function createProceduralNinja(appearance) {
   const a = appearance;
   const root = new THREE.Group();
   const scale = a.height || 1;
@@ -519,11 +906,11 @@ export function createNinja(appearance) {
   root.add(aura2);
 
   const parts = { root, hips, torso, head, lArm, rArm, lLeg, rLeg, aura, aura2 };
-  const animator = new Animator(parts);
+  const animator = new RigAnimator(parts);
   return { root, parts, animator, appearance: a, update: (dt, st) => animator.update(dt, st) };
 }
 
-class Animator {
+class RigAnimator {
   constructor(parts) {
     this.p = parts;
     this.state = "idle";
@@ -648,12 +1035,3 @@ class Animator {
   }
 }
 
-export function disposeNinja(ninja) {
-  ninja?.root.traverse((o) => {
-    if (o.geometry) o.geometry.dispose();
-    if (o.material) {
-      if (Array.isArray(o.material)) o.material.forEach((m) => m.dispose());
-      else o.material.dispose();
-    }
-  });
-}
