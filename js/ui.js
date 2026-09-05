@@ -1,4 +1,9 @@
 import { ELEMENTS, ELEMENT_IDS, HAIR_STYLES, EYE_STYLES, MARKINGS, OUTFITS, VILLAGES, PRESETS, LEVELS, DIFFICULTY, QUALITY, STATUS, fusionUltimate } from "./config.js";
+import { ACTION_LABELS } from "./input.js";
+
+export function escapeHTML(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+}
 
 export function el(html) {
   const t = document.createElement("template");
@@ -23,75 +28,83 @@ export function toast(msg) {
 
 export function bootScreen() {
   return el(`<div class="screen" id="boot">
-    <img class="boot-logo" src="assets/img/logo.png" alt="Hokage" />
+    <img class="boot-logo" src="assets/img/logo-ui.webp" alt="Hokage" />
     <div class="gold-title boot-title">HOKAGE</div>
     <div class="boot-msg">CARGANDO CHAKRA</div>
     <div class="boot-bar"><i id="boot-fill"></i></div>
   </div>`);
 }
 
-export function menuScreen(save) {
+export function menuScreen(save, input) {
   return el(`<div class="screen" id="menu">
     <div class="menu-top">
-      <img src="assets/img/logo.png" alt="" />
+      <img src="assets/img/logo-ui.webp" alt="" />
       <div>
         <div class="menu-kicker">Shinobi Fatal Clash</div>
         <div class="gold-title menu-title">HOKAGE</div>
-        <div class="menu-sub">Ciudad neón · Dos elementos · Un nombre</div>
+        <div class="menu-sub">NARUTO × NEO CITY · TAIJUTSU</div>
       </div>
     </div>
     <nav class="menu-nav">
       <button class="btn primary" data-go="campaign">Campaña — 30 misiones</button>
       <button class="btn" data-go="versus">Combate rápido</button>
-      <button class="btn" data-go="editor">Personalizar shinobi</button>
+      <button class="btn" data-go="editor">Personaje y chakra</button>
       <button class="btn" data-go="settings">Ajustes</button>
       <button class="btn ghost" data-go="credits">Créditos</button>
     </nav>
     <div class="menu-footer">
       <span>Progreso: ${save.completed.length}/30 · Desbloqueado ${save.unlocked}</span>
-      <span>J / K / L golpes · U / I / O jutsus</span>
+      <span>${escapeHTML(input.label("light"))} / ${escapeHTML(input.label("heavy"))} / ${escapeHTML(input.label("kick"))} taijutsu · PC + táctil</span>
     </div>
   </div>`);
 }
 
 export function settingsScreen(settings, binds, input) {
-  const diffs = Object.entries(DIFFICULTY).map(([k, v]) => `<option value="${k}" ${settings.difficulty===k?"selected":""}>${v.label}</option>`).join("");
-  const quals = Object.keys(QUALITY).map((k) => `<option value="${k}" ${settings.quality===k?"selected":""}>${k}</option>`).join("");
-  const keys = Object.keys(binds).map((a) => `<div class="keybind"><span>${a}</span><kbd data-bind="${a}">${input.label(a)}</kbd></div>`).join("");
+  const diffs = Object.entries(DIFFICULTY).map(([key, value]) => `<option value="${key}" ${settings.difficulty === key ? "selected" : ""}>${value.label}</option>`).join("");
+  const qualities = Object.keys(QUALITY).map((key) => `<option value="${key}" ${settings.quality === key ? "selected" : ""}>${key}</option>`).join("");
+  const touch = [["auto", "Automático"], ["on", "Siempre visibles"], ["off", "Solo teclado"]].map(([key, label]) => `<option value="${key}" ${settings.touchControls === key ? "selected" : ""}>${label}</option>`).join("");
+  const keys = Object.keys(binds).map((action) => `<div class="keybind"><span>${ACTION_LABELS[action]}</span><button class="keybind-key" data-bind="${action}" aria-label="Reasignar ${ACTION_LABELS[action]}">${escapeHTML(input.label(action))}</button></div>`).join("");
   return el(`<div class="screen overlay" id="settings">
     <div class="panel sheet">
       <h2 class="gold-title">Ajustes</h2>
-      <p class="lead">Calibra el dojo digital. Los cambios se guardan en este navegador.</p>
-      <div class="row"><label>Música<span class="hint">Tema procedural</span></label><input type="range" min="0" max="1" step="0.01" data-set="music" value="${settings.music}" /></div>
-      <div class="row"><label>Efectos<span class="hint">Golpes y jutsus</span></label><input type="range" min="0" max="1" step="0.01" data-set="sfx" value="${settings.sfx}" /></div>
-      <div class="row"><label>Dificultad</label><select data-set="difficulty">${diffs}</select></div>
-      <div class="row"><label>Calidad</label><select data-set="quality">${quals}</select></div>
-      <div class="row"><label>Pistas de control</label><input type="checkbox" data-set="showHints" ${settings.showHints?"checked":""} /></div>
-      <div class="row"><label>Hitboxes (debug)</label><input type="checkbox" data-set="hitboxes" ${settings.hitboxes?"checked":""} /></div>
-      <h3 class="gold-title" style="margin-top:18px;font-size:16px">Controles</h3>
-      <p class="lead">Haz clic en una tecla y pulsa otra para reasignar.</p>
-      ${keys}
+      <p class="lead">Tu dojo, a tu medida. Los cambios se guardan en este navegador.</p>
+      <div class="row"><label for="music-setting">Música</label><input id="music-setting" type="range" min="0" max="1" step="0.01" data-set="music" value="${settings.music}" /></div>
+      <div class="row"><label for="sfx-setting">Efectos</label><input id="sfx-setting" type="range" min="0" max="1" step="0.01" data-set="sfx" value="${settings.sfx}" /></div>
+      <div class="row"><label for="difficulty-setting">Dificultad</label><select id="difficulty-setting" data-set="difficulty">${diffs}</select></div>
+      <div class="row"><label for="quality-setting">Calidad<span class="hint">Resolución adaptativa · baja recomendada en móvil</span></label><select id="quality-setting" data-set="quality">${qualities}</select></div>
+      <div class="row"><label for="hints-setting">Pistas de control</label><input id="hints-setting" type="checkbox" data-set="showHints" ${settings.showHints ? "checked" : ""} /></div>
+      <div class="row"><label for="touch-setting">Controles táctiles<span class="hint">Multitáctil, también en tablet y portátil táctil</span></label><select id="touch-setting" data-set="touchControls">${touch}</select></div>
+      <div class="row"><label for="scale-setting">Tamaño de botones</label><input id="scale-setting" type="range" min="0.85" max="1.15" step="0.05" data-set="touchScale" value="${settings.touchScale}" /></div>
+      <h3 class="gold-title section-title">Teclado</h3>
+      <p class="lead">WASD o flechas · Espacio también salta. Pulsa una tecla para reasignarla; Esc cancela. Las teclas ocupadas se intercambian.</p>
+      <div class="keybind-grid">${keys}</div>
       <div class="actions">
         <button class="btn primary" data-go="menu">Volver</button>
         <button class="btn ghost" data-act="resetBinds">Restablecer teclas</button>
+        <button class="btn ghost" data-act="fullscreen">Pantalla completa</button>
       </div>
     </div>
   </div>`);
 }
 
 export function editorScreen(app) {
-  const tabs = ["identidad","rostro","cabello","ojos","marcas","ropa","accesorios","elementos","inspiraciones"];
+  const tabs = app.model === "custom" ? ["identidad","rostro","cabello","ojos","marcas","ropa","accesorios","elementos","inspiraciones"] : ["identidad", "elementos"];
   const tabBtns = tabs.map((t,i)=>`<button class="tab ${i===0?"on":""}" data-tab="${t}">${t}</button>`).join("");
   return el(`<div class="screen" id="editor">
     <div class="editor-grid">
       <div class="panel editor-side">
-        <h2 class="gold-title">Laboratorio Shinobi</h2>
-        <p class="lead">Edita cada detalle. El modelo 3D se actualiza en vivo.</p>
+        <h2 class="gold-title">Dojo Shinobi</h2>
+        <p class="lead">${app.model === "custom" ? "Crea tu shinobi y prueba sus técnicas." : "Naruto original, listo para el combate. Elige tu alias y tus dos naturalezas de chakra."}</p>
+        <div class="animation-preview"><span>PRUEBA EL TAIJUTSU</span><div class="chip-row">
+          <button class="chip" data-preview="light">Jab</button><button class="chip" data-preview="heavy">Directo</button>
+          <button class="chip" data-preview="kick">Circular</button><button class="chip" data-preview="crouchLight">Barrido</button>
+          <button class="chip" data-preview="airKick">Aérea</button>
+        </div></div>
         <div class="tabs">${tabBtns}</div>
         <div id="editor-fields"></div>
         <div class="actions">
           <button class="btn primary" data-act="saveChar">Guardar y salir</button>
-          <button class="btn" data-act="randomChar">Aleatorio</button>
+          <button class="btn" data-act="randomChar">${app.model === "custom" ? "Aleatorio" : "Chakra aleatorio"}</button>
           <button class="btn ghost" data-go="menu">Cancelar</button>
         </div>
       </div>
@@ -115,10 +128,13 @@ export function editorFields(tab, app) {
   const HAIR_SWATCHES = ["#f2d36b", "#1a1a1e", "#c81e3a", "#e8d080", "#c8d0d8", "#2a2018", "#7a5cff", "#f2a0c0", "#d8e4ea", "#1e6b3a"];
   const OUTFIT_SWATCHES = ["#2b3548", "#c81e3a", "#1c2430", "#e07020", "#3a2a58", "#1e6b3a", "#c8b090", "#111111", "#d8c8a0", "#0c1018"];
   if (tab === "identidad") {
-    return `<div class="field"><span>Nombre</span><input type="text" maxlength="18" data-name value="${app.name}" /></div>
+    const model = sel("Personaje", [{ id: "naruto", name: "Naruto · modelo original" }, { id: "custom", name: "Shinobi personalizado" }], app.model, "model");
+    const identity = `${model}<div class="field"><label for="fighter-name">Nombre de combate</label><input id="fighter-name" type="text" maxlength="18" data-name value="${escapeHTML(app.name)}" /></div>
+      <div class="field"><label for="fighter-height">Altura</label><input id="fighter-height" type="range" min="0.9" max="1.12" step="0.01" data-num="height" value="${app.height}" /></div>`;
+    if (app.model !== "custom") return `${identity}<p class="asset-note">Modelo y texturas de /Naruto. Animación esquelética de taijutsu, sin armas. El aspecto original se conserva; el editor completo sigue disponible en «Shinobi personalizado».</p>`;
+    return `${identity}
       ${sel("Género", [{id:"male",name:"Masculino"},{id:"female",name:"Femenino"},{id:"androgynous",name:"Andrógino"}], app.gender, "gender")}
       ${sel("Complexión", [{id:"slim",name:"Delgado"},{id:"athletic",name:"Atlético"},{id:"broad",name:"Corpulento"}], app.build, "build")}
-      <div class="field"><span>Altura</span><input type="range" min="0.9" max="1.12" step="0.01" data-num="height" value="${app.height}" /></div>
       ${sel("Aldea", VILLAGES, app.village, "village")}`;
   }
   if (tab === "rostro") {
@@ -218,8 +234,8 @@ export function vsIntro(pName, eLevel) {
         : `MISIÓN ${String(eLevel.id).padStart(2, "0")}`;
   return el(`<div class="vs-intro">
     <div class="vs-card">
-      <img src="assets/img/portrait-player.jpg" alt="" />
-      <h3>${pName}</h3>
+      <img src="${eLevel.playerModel === "custom" ? "assets/img/portrait-player.jpg" : "assets/img/naruto-portrait.png"}" alt="Tu luchador" />
+      <h3>${escapeHTML(pName)}</h3>
       <div class="felems">${(eLevel.playerElems||[]).join(" / ")}</div>
     </div>
     <div class="vs-mark">VS</div>
@@ -231,7 +247,7 @@ export function vsIntro(pName, eLevel) {
   </div>`);
 }
 
-export function hud(p1, p2, level) {
+export function hud(p1, p2, level, input) {
   const roundLabel = level.versus
     ? "VERSUS"
     : level.boss
@@ -242,30 +258,33 @@ export function hud(p1, p2, level) {
   return el(`<div id="hud" class="pass-through">
     <div class="hud-top">
       <div class="fighter-hud">
-        <div class="name-row"><div class="fname" id="p1-name">${p1.name}</div><div class="felems" id="p1-el"></div></div>
-        <div class="bar" id="p1-hp"><b></b><i></i></div>
-        <div class="bar chakra" id="p1-ck"><i></i></div>
+        <div class="name-row"><div class="fname" id="p1-name">${escapeHTML(p1.name)}</div><div class="felems" id="p1-el"></div></div>
+        <div class="bar" id="p1-hp" role="progressbar" aria-label="Tu vitalidad" aria-valuemin="0" aria-valuemax="100"><b></b><i></i></div>
+        <div class="bar chakra" id="p1-ck" role="progressbar" aria-label="Tu chakra" aria-valuemin="0" aria-valuemax="100"><i></i></div>
         <div class="status-row" id="p1-status"></div>
       </div>
       <div class="timer"><div class="round">${roundLabel}</div><div class="t" id="timer">99</div><div class="wave-info" id="wave-info"></div></div>
       <div class="fighter-hud p2">
-        <div class="name-row"><div class="fname" id="p2-name">${p2.name}</div><div class="felems" id="p2-el"></div></div>
-        <div class="bar" id="p2-hp"><b></b><i></i></div>
-        <div class="bar chakra" id="p2-ck"><i></i></div>
+        <div class="name-row"><div class="fname" id="p2-name">${escapeHTML(p2.name)}</div><div class="felems" id="p2-el"></div></div>
+        <div class="bar" id="p2-hp" role="progressbar" aria-label="Vitalidad rival" aria-valuemin="0" aria-valuemax="100"><b></b><i></i></div>
+        <div class="bar chakra" id="p2-ck" role="progressbar" aria-label="Chakra rival" aria-valuemin="0" aria-valuemax="100"><i></i></div>
         <div class="status-row p2" id="p2-status"></div>
       </div>
     </div>
+    <div class="stage-label">${level.stage.name}<span>NEO CITY / NIKO</span></div>
+    <div class="hud-tools"><button data-act="fullscreen" aria-label="Pantalla completa" title="Pantalla completa"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5m11-5h5v5M4 15v5h5m6 0h5v-5"/></svg></button><button data-act="pause" aria-label="Pausar combate" title="Pausa">Ⅱ</button></div>
     <div class="combo" id="combo">0 <small>HITS</small></div>
     <div class="announcer" id="announcer"></div>
-    <div class="help-strip" id="help">A/D mover · W salto · S agachar · Shift bloqueo · J/K/L golpes · U/I jutsus · O ultimátum · P dash · ESC pausa</div>
+    <div class="help-strip" id="help">${escapeHTML(input.label("left"))}/${escapeHTML(input.label("right"))} mover · ${escapeHTML(input.label("up"))} salto · ${escapeHTML(input.label("down"))}+${escapeHTML(input.label("light"))} barrido · ${escapeHTML(input.label("block"))} guardia · ${escapeHTML(input.label("light"))}/${escapeHTML(input.label("heavy"))}/${escapeHTML(input.label("kick"))} taijutsu · ${escapeHTML(input.label("special1"))}/${escapeHTML(input.label("special2"))} jutsus · ${escapeHTML(input.label("ultimate"))} fusión · ${escapeHTML(input.label("dash"))} dash · ${escapeHTML(input.label("pause"))} pausa</div>
     <div id="pause-slot"></div>
     <div id="result-slot"></div>
   </div>`);
 }
 
 export function pauseMenu() {
-  return el(`<div class="panel pause-menu">
+  return el(`<div class="panel pause-menu" role="dialog" aria-modal="true" aria-label="Juego en pausa">
     <h2 class="gold-title">Pausa</h2>
+    <p class="lead">Tómate un respiro. El combate está detenido.</p>
     <button class="btn primary" data-act="resume">Reanudar</button>
     <button class="btn" data-act="restart">Reiniciar misión</button>
     <button class="btn ghost" data-go="menu">Abandonar</button>
@@ -293,35 +312,45 @@ export function resultScreen(win, level, versus = false) {
 
 export function creditsScreen() {
   return el(`<div class="screen overlay"><div class="panel credits">
-    <img src="assets/img/logo.png" width="90" alt="" />
+    <img src="assets/img/logo-ui.webp" width="90" alt="" />
     <h2 class="gold-title">HOKAGE</h2>
     <h3>Diseño</h3>
     <p>Pelea 2.5D al estilo Fatal Fury · shinobi urbanos inspirados en la era Boruto.</p>
     <h3>Sistemas</h3>
     <p>Dos naturalezas de chakra · editor avanzado · 30 misiones · jefe cada 5 niveles.</p>
     <h3>Motor</h3>
-    <p>Three.js · Web Audio · personalización procedural 3D.</p>
-    <div class="actions" style="justify-content:center"><button class="btn primary" data-go="menu">Volver</button></div>
+    <p>Three.js · Web Audio · animación esquelética de taijutsu.</p>
+    <h3>Assets</h3>
+    <p>Ciudad: <strong>Futuristic low poly city by Niko</strong>, a partir del FBX aportado.<br>Personaje: modelo y texturas de la carpeta /Naruto aportada al repositorio.<br>Animaciones de artes marciales creadas para esta integración.</p>
+    <p class="asset-note">Naruto pertenece a sus respectivos titulares. Homenaje no oficial. Consulta assets/models/README.md para la procedencia y las condiciones de redistribución pendientes de verificar.</p>
+    <div class="actions" style="justify-content:center"><button class="btn primary" data-go="menu">Volver</button><a class="btn ghost" href="THIRD_PARTY_NOTICES.md" target="_blank" rel="noopener">Licencias</a></div>
   </div></div>`);
 }
 
-export function touchLayer() {
-  return el(`<div id="touch">
-    <div class="touch-group move">
-      <button class="touch-btn" data-act="up" style="left:56px;bottom:88px">▲</button>
-      <button class="touch-btn" data-act="left" style="left:0;bottom:24px">◀</button>
-      <button class="touch-btn" data-act="down" style="left:56px;bottom:-38px">▼</button>
-      <button class="touch-btn" data-act="right" style="left:112px;bottom:24px">▶</button>
-    </div>
-    <div class="touch-group actions">
-      <button class="touch-btn small" data-act="block" style="right:196px;bottom:88px">BLK</button>
-      <button class="touch-btn small" data-act="dash" style="right:196px;bottom:24px">DASH</button>
-      <button class="touch-btn" data-act="light" style="right:124px;bottom:88px">J</button>
-      <button class="touch-btn" data-act="heavy" style="right:62px;bottom:126px">K</button>
-      <button class="touch-btn" data-act="kick" style="right:0;bottom:88px">L</button>
-      <button class="touch-btn small" data-act="special1" style="right:124px;bottom:16px">U</button>
-      <button class="touch-btn small" data-act="special2" style="right:62px;bottom:16px">I</button>
-      <button class="touch-btn small ult" data-act="ultimate" style="right:0;bottom:16px">O</button>
+export function touchLayer(player) {
+  const element1 = player.el1;
+  const element2 = player.el2;
+  return el(`<div id="touch" aria-label="Controles táctiles">
+    <div class="touch-dock">
+      <div class="movement-control">
+        <div class="joystick" data-joystick role="group" aria-label="Joystick: izquierda y derecha para mover, arriba para saltar, abajo para agacharse">
+          <span class="stick-up" aria-hidden="true">▲</span><span class="stick-down" aria-hidden="true">▼</span>
+          <span class="stick-left" aria-hidden="true">◀</span><span class="stick-right" aria-hidden="true">▶</span>
+          <i class="joystick-thumb" aria-hidden="true"></i>
+        </div>
+        <span class="touch-hint">↑ SALTO · ↓ AGÁCHATE</span>
+      </div>
+      <div class="touch-actions">
+        <button class="touch-btn jutsu" data-input="special1" aria-label="Jutsu 1: ${element1.name}" style="--element:${element1.color}"><b>${element1.kana}</b><span>JUTSU I</span></button>
+        <button class="touch-btn jutsu" data-input="special2" aria-label="Jutsu 2: ${element2.name}" style="--element:${element2.color}"><b>${element2.kana}</b><span>JUTSU II</span></button>
+        <button class="touch-btn ult" data-input="ultimate" aria-label="Fusión de chakra"><b>奥</b><span>FUSIÓN</span></button>
+        <button class="touch-btn attack" data-input="light" aria-label="Puño ligero, barrido al agacharse"><b>PUÑO</b><span>JAB</span></button>
+        <button class="touch-btn attack" data-input="heavy" aria-label="Puño fuerte"><b>FUERTE</b><span>DIRECTO</span></button>
+        <button class="touch-btn attack" data-input="kick" aria-label="Patada circular o aérea"><b>PATADA</b><span>CIRCULAR</span></button>
+        <button class="touch-btn utility" data-input="block" aria-label="Mantener guardia"><b>◇</b><span>GUARDIA</span></button>
+        <button class="touch-btn utility" data-input="up" aria-label="Saltar, mantener para más altura"><b>↑</b><span>SALTO</span></button>
+        <button class="touch-btn utility" data-input="dash" aria-label="Dash"><b>»</b><span>DASH</span></button>
+      </div>
     </div>
   </div>`);
 }

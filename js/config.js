@@ -1,4 +1,4 @@
-export const VERSION = "1.0.0";
+export const VERSION = "1.1.0";
 export const ARENA = { minX: -8.4, maxX: 8.4, ground: 0 };
 export const ROUND_TIME = 99;
 
@@ -10,9 +10,9 @@ export const DIFFICULTY = {
 };
 
 export const QUALITY = {
-  baja: { shadows: false, bloom: false, buildings: 8, particles: 0.45 },
-  media: { shadows: true, bloom: false, buildings: 14, particles: 0.75 },
-  alta: { shadows: true, bloom: true, buildings: 22, particles: 1 },
+  baja: { shadows: false, bloom: false, buildings: 12, particles: 0.35, pixelRatio: 1, shadowMap: 512 },
+  media: { shadows: true, bloom: false, buildings: 18, particles: 0.65, pixelRatio: 1.25, shadowMap: 768 },
+  alta: { shadows: true, bloom: true, buildings: 26, particles: 1, pixelRatio: 1.75, shadowMap: 1024 },
 };
 
 export const VILLAGES = [
@@ -279,13 +279,15 @@ export function fusionUltimate(a, b) {
     "ice+sound": { name: "Cristal Quebrado", type: "projectile", damage: 31, color: "#d0e0ff" },
     "shadow+sound": { name: "Concierto Umbrío", type: "melee", damage: 33, color: "#c090ff" },
   };
-  const base = table[pair] || { name: "Jutsu Secreto", type: "melee", damage: 30, color: "#ffe08a" };
+  const canonicalTable = Object.fromEntries(Object.entries(table).map(([key, value]) => [key.split("+").sort().join("+"), value]));
+  const base = canonicalTable[pair] || { name: "Jutsu Secreto", type: "melee", damage: 30, color: "#ffe08a" };
   const statuses = [ELEMENT_STATUS[a], ELEMENT_STATUS[b]].filter(Boolean);
   return { ...base, chakra: 100, cooldown: 8, hitstun: 0.85, ultimate: true, statuses };
 }
 
 export const DEFAULT_APPEARANCE = {
-  name: "Boruto-kei",
+  model: "naruto",
+  name: "Naruto",
   gender: "androgynous",
   height: 1,
   build: "athletic",
@@ -656,7 +658,7 @@ export const STAGES = [
   { id: "street", name: "Avenida Konoha-Neo", palette: ["#1b2230", "#c81e3a", "#3ee0ff"], rain: true },
   { id: "rooftop", name: "Azoteas de Hokage", palette: ["#12151c", "#e8c36a", "#ff6a2a"], rain: false },
   { id: "alley", name: "Callejón de Neón", palette: ["#0c0d14", "#e85cff", "#3ee0ff"], rain: true },
-  { id: "station", name: "Andén Subterráneo", palette: ["#151820", "#3ee0ff", "#e8c36a"], rain: false },
+  { id: "station", name: "Terminal del Maglev", palette: ["#151820", "#3ee0ff", "#e8c36a"], rain: false },
   { id: "bridge", name: "Puente del Trueno", palette: ["#101820", "#c9f6ff", "#3aa0ff"], rain: true },
   { id: "plaza", name: "Plaza del Monumento", palette: ["#1a140e", "#e8c36a", "#c81e3a"], rain: false },
 ];
@@ -932,9 +934,9 @@ export const DEFAULT_SETTINGS = {
   sfx: 0.8,
   difficulty: "normal",
   quality: "alta",
-  fullscreen: false,
   showHints: true,
-  hitboxes: false,
+  touchControls: "auto",
+  touchScale: 1,
 };
 
 export const DEFAULT_BINDS = {
@@ -957,6 +959,6 @@ export const MOVES = {
   light: { startup: 0.08, active: 0.08, recovery: 0.14, damage: 6, hitstun: 0.26, blockstun: 0.13, knock: 1.5, range: 1.3, height: 1.15, chip: 1 },
   heavy: { startup: 0.18, active: 0.12, recovery: 0.26, damage: 11, hitstun: 0.38, blockstun: 0.19, knock: 2.7, range: 1.48, height: 1.2, chip: 2 },
   kick: { startup: 0.15, active: 0.12, recovery: 0.22, damage: 9, hitstun: 0.33, blockstun: 0.17, knock: 3.0, range: 1.6, height: 0.85, chip: 1.5 },
-  crouchLight: { startup: 0.08, active: 0.07, recovery: 0.13, damage: 5, hitstun: 0.23, blockstun: 0.11, knock: 1.1, range: 1.18, height: 0.7, chip: 1 },
+  crouchLight: { startup: 0.12, active: 0.1, recovery: 0.2, damage: 7, hitstun: 0.28, blockstun: 0.13, knock: 1.8, range: 1.45, height: 0.7, chip: 1 },
   airKick: { startup: 0.1, active: 0.15, recovery: 0.16, damage: 8, hitstun: 0.29, blockstun: 0.11, knock: 2.3, range: 1.38, height: 0.9, chip: 1 },
 };

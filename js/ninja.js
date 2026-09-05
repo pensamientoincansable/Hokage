@@ -1,5 +1,7 @@
 import * as THREE from "three";
 import { ELEMENTS } from "./config.js";
+import { animateNinja } from "./martial-arts.js";
+import { disposeTree } from "./resources.js";
 
 function mat(color, extra = {}) {
   return new THREE.MeshStandardMaterial({
@@ -32,7 +34,7 @@ function villageCanvas(symbol, bg, fg) {
   g.lineWidth = 6;
   g.strokeRect(8, 8, 112, 112);
   g.fillStyle = fg;
-  g.font = "bold 64px serif";
+  g.font = '500 64px "Noto Sans JP", sans-serif';
   g.textAlign = "center";
   g.textBaseline = "middle";
   g.fillText(symbol, 64, 70);
@@ -519,141 +521,19 @@ export function createNinja(appearance) {
   root.add(aura2);
 
   const parts = { root, hips, torso, head, lArm, rArm, lLeg, rLeg, aura, aura2 };
-  const animator = new Animator(parts);
-  return { root, parts, animator, appearance: a, update: (dt, st) => animator.update(dt, st) };
-}
-
-class Animator {
-  constructor(parts) {
-    this.p = parts;
-    this.state = "idle";
-    this.t = 0;
-    this.lock = 0;
-    this.flash = 0;
-  }
-
-  play(name, lock = 0) {
-    if (this.t < this.lock && !["hurt", "ko", "win"].includes(name)) return;
-    this.state = name;
-    this.t = 0;
-    this.lock = lock;
-  }
-
-  update(dt, st = {}) {
-    this.t += dt;
-    const { hips, torso, head, lArm, rArm, lLeg, rLeg, aura, aura2 } = this.p;
-    const reset = () => {
-      [lArm, rArm, lLeg, rLeg, torso, head, hips].forEach((n) => n.rotation.set(0, 0, 0));
-      lArm.userData.upper.rotation.set(0, 0, 0);
-      rArm.userData.upper.rotation.set(0, 0, 0);
-      lArm.userData.fore.rotation.set(0, 0, 0);
-      rArm.userData.fore.rotation.set(0, 0, 0);
-      lLeg.userData.thigh.rotation.set(0, 0, 0);
-      rLeg.userData.thigh.rotation.set(0, 0, 0);
-      lLeg.userData.shin.rotation.set(0, 0, 0);
-      rLeg.userData.shin.rotation.set(0, 0, 0);
-    };
-    reset();
-    const s = this.state;
-    const t = this.t;
-    const bob = Math.sin(t * 4) * 0.015;
-    if (s === "idle") {
-      hips.position.y = 0.95 + bob;
-      lArm.userData.upper.rotation.x = 0.15 + bob;
-      rArm.userData.upper.rotation.x = 0.15 - bob;
-      torso.rotation.y = Math.sin(t * 1.2) * 0.04;
-      head.rotation.y = Math.sin(t * 1.2 + 1) * 0.03;
-    } else if (s === "walk") {
-      const w = Math.sin(t * 11);
-      lLeg.userData.thigh.rotation.x = w * 0.72;
-      rLeg.userData.thigh.rotation.x = -w * 0.72;
-      lArm.userData.upper.rotation.x = -w * 0.5;
-      rArm.userData.upper.rotation.x = w * 0.5;
-      torso.rotation.x = 0.12;
-      hips.position.y = 0.95 + Math.abs(w) * 0.03;
-    } else if (s === "jump") {
-      lArm.userData.upper.rotation.x = -0.9;
-      rArm.userData.upper.rotation.x = -0.9;
-      lLeg.userData.thigh.rotation.x = -0.45;
-      rLeg.userData.thigh.rotation.x = 0.35;
-      torso.rotation.x = -0.15;
-    } else if (s === "crouch") {
-      hips.position.y = 0.7;
-      lLeg.userData.thigh.rotation.x = -1.1;
-      rLeg.userData.thigh.rotation.x = -1.1;
-      lLeg.userData.shin.rotation.x = 1.4;
-      rLeg.userData.shin.rotation.x = 1.4;
-      lArm.userData.upper.rotation.x = 0.4;
-      rArm.userData.upper.rotation.x = 0.4;
-      torso.rotation.x = 0.2;
-    } else if (s === "block") {
-      lArm.userData.upper.rotation.set(-1.2, 0, 0.6);
-      rArm.userData.upper.rotation.set(-1.2, 0, -0.6);
-      torso.rotation.x = 0.15;
-    } else if (s === "light" || s === "crouchLight") {
-      const k = Math.min(1, t / 0.12);
-      rArm.userData.upper.rotation.x = -1.6 * k;
-      rArm.userData.fore.rotation.x = -0.4 * k;
-      torso.rotation.y = -0.3 * k;
-    } else if (s === "heavy") {
-      const k = Math.min(1, t / 0.22);
-      rArm.userData.upper.rotation.x = -1.8 * k;
-      rArm.userData.upper.rotation.z = -0.4 * k;
-      torso.rotation.y = -0.45 * k;
-      torso.rotation.x = 0.1 * k;
-    } else if (s === "kick" || s === "airKick") {
-      const k = Math.min(1, t / 0.16);
-      rLeg.userData.thigh.rotation.x = -1.55 * k;
-      lArm.userData.upper.rotation.x = -0.6;
-      torso.rotation.x = -0.15;
-      if (s === "airKick") lLeg.userData.thigh.rotation.x = -0.4;
-    } else if (s === "special" || s === "ultimate") {
-      const k = Math.sin(Math.min(1, t / 0.25) * Math.PI);
-      lArm.userData.upper.rotation.x = -1.8 * k;
-      rArm.userData.upper.rotation.x = -1.8 * k;
-      torso.rotation.x = -0.3 * k;
-      aura.material.opacity = 0.9;
-      aura2.material.opacity = 0.75;
-    } else if (s === "hurt") {
-      torso.rotation.x = -0.35;
-      head.rotation.x = 0.25;
-      lArm.userData.upper.rotation.x = -0.8;
-      rArm.userData.upper.rotation.x = -0.8;
-    } else if (s === "ko") {
-      hips.rotation.x = Math.min(1.4, t * 3);
-      hips.position.y = 0.95 - Math.min(0.7, t * 1.5);
-    } else if (s === "win") {
-      rArm.userData.upper.rotation.x = -2.4;
-      hips.rotation.y = Math.sin(t * 3) * 0.1;
-    } else if (s === "dash") {
-      torso.rotation.x = 0.4;
-      lArm.userData.upper.rotation.x = 1.1;
-      rArm.userData.upper.rotation.x = 1.1;
-    }
-    if (s !== "special" && s !== "ultimate") {
-      aura.material.opacity = THREE.MathUtils.lerp(aura.material.opacity, 0, dt * 6);
-      aura2.material.opacity = THREE.MathUtils.lerp(aura2.material.opacity, 0, dt * 6);
-    }
-    aura.rotation.z += dt * 2;
-    aura2.rotation.z -= dt * 2.6;
-    if (st.flash) {
-      this.flash = 0.12;
-    }
-    if (this.flash > 0) {
-      this.flash -= dt;
-      head.traverse((o) => {
-        if (o.material && o.material.emissive) o.material.emissive.setHex(0xffdddd);
-      });
-    }
-  }
+  const rig = {
+    hips, torso, head,
+    lUpper: lArm.userData.upper, rUpper: rArm.userData.upper,
+    lFore: lArm.userData.fore, rFore: rArm.userData.fore,
+    lThigh: lLeg.userData.thigh, rThigh: rLeg.userData.thigh,
+    lShin: lLeg.userData.shin, rShin: rLeg.userData.shin,
+  };
+  const { animator, update } = animateNinja(root, rig, aura, aura2);
+  return { root, parts, animator, appearance: a, update, modelType: "custom" };
 }
 
 export function disposeNinja(ninja) {
-  ninja?.root.traverse((o) => {
-    if (o.geometry) o.geometry.dispose();
-    if (o.material) {
-      if (Array.isArray(o.material)) o.material.forEach((m) => m.dispose());
-      else o.material.dispose();
-    }
-  });
+  if (!ninja) return;
+  ninja.animator.dispose();
+  disposeTree(ninja.root);
 }

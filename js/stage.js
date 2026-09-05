@@ -1,182 +1,334 @@
 import * as THREE from "three";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { QUALITY } from "./config.js";
+import { getAssets } from "./assets.js";
+import { disposeTree } from "./resources.js";
 
-function mat(color, extra = {}) {
-  return new THREE.MeshStandardMaterial({
-    color,
-    roughness: extra.roughness ?? 0.7,
-    metalness: extra.metalness ?? 0.15,
-    emissive: extra.emissive ?? 0x000000,
-    emissiveIntensity: extra.emissiveIntensity ?? 0,
-  });
-}
+const BUILDINGS = ["tower-ring", "tower-needle", "tower-block", "tower-spire", "hangar"];
+const rand = (n) => { const v = Math.sin(n * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); };
 
 export class Stage {
   constructor(renderer, quality = "alta") {
     this.renderer = renderer;
-    this.q = QUALITY[quality] || QUALITY.alta;
+    this.setQuality(quality);
     this.group = new THREE.Group();
     this.fx = new THREE.Group();
-    this.rain = [];
     this.signs = [];
+    this.traffic = [];
+    this.time = 0;
     this.loaded = false;
   }
 
-  async loadTextures() {
-    const loader = new THREE.TextureLoader();
-    const load = (url) =>
-      new Promise((res) => {
-        loader.load(
-          url,
-          (t) => {
-            t.colorSpace = THREE.SRGBColorSpace;
-            t.wrapS = t.wrapT = THREE.RepeatWrapping;
-            res(t);
-          },
-          undefined,
-          () => res(null)
-        );
-      });
-    this.streetTex = await load("assets/img/stage-street.jpg");
-    this.buildTex = await load("assets/img/building.jpg");
-    if (this.streetTex) this.streetTex.repeat.set(6, 2);
-    if (this.buildTex) this.buildTex.repeat.set(2, 3);
+  setQuality(quality) {
+    this.quality = quality;
+    this.q = QUALITY[quality] || QUALITY.media;
   }
 
   build(stageDef) {
     this.clear();
-    const pal = stageDef?.palette || ["#1b2230", "#c81e3a", "#3ee0ff"];
-    const rainOn = !!stageDef?.rain;
+    this.definition = stageDef;
+    this.group.name = `Niko-city-${stageDef.id}`;
+    this.fx.name = "Combat-effects";
+    const pal = stageDef.palette;
+    const id = stageDef.id;
     const scene = this.renderer.scene;
-    scene.background = new THREE.Color(pal[0]);
-    scene.fog = new THREE.Fog(pal[0], 12, 42);
+    scene.background = new THREE.Color(pal[0]).multiplyScalar(0.45);
+    scene.fog = new THREE.Fog(scene.background, 26, 105);
+    this.batches = new Map();
+    this.materials = new Map();
+    this.accent = pal[2];
+    this.secondary = pal[1];
+    this.kit = getAssets().city;
 
-    const groundMat = mat("#1a1d24", { roughness: 0.35, metalness: 0.4 });
-    if (this.streetTex) groundMat.map = this.streetTex;
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(48, 18), groundMat);
-    ground.rotation.x = -Math.PI / 2;
-    ground.receiveShadow = true;
-    this.group.add(ground);
+    const water = id === "bridge";
+    const roof = id === "rooftop";
+    this.box(150, 0.3, 110, 0, roof ? -7.5 : water ? -4 : -0.42, -28,
+      this.material(water ? "#0d3043" : "#0d1728", { metalness: 0.55, roughness: water ? 0.2 : 0.72 }));
+    const deck = this.material("#27384a", { roughness: 0.54, metalness: 0.35 });
+    this.box(21, 0.32, water ? 4.8 : 5.8, 0, -0.16, 0, deck);
+    this.box(21.4, 0.16, 6, 0, -0.4, 0, this.material("#0c1523"));
+    const edge = this.glow(this.accent, 1.7);
+    for (const z of [-2.75, 2.75]) this.box(21, 0.035, 0.065, 0, 0.01, z, edge);
+    const seam = this.material("#0d1c2c");
+    for (let x = -9; x <= 9; x += 1.5) {
+      this.box(0.035, 0.015, 5.35, x, 0.013, 0, seam);
+      if (Math.abs(x) < 8) this.box(0.4, 0.018, 0.05, x, 0.026, 1.75, edge);
+    }
+    for (const x of [-8.5, 8.5]) {
+      this.box(0.08, 0.02, 4.2, x, 0.035, 0, this.glow(this.secondary, 1.2));
+    }
+    this.ring(1.1, 0.018, 0, 0.025, 0, this.accent, 0.28);
 
-    const curb = new THREE.Mesh(new THREE.BoxGeometry(40, 0.18, 1.2), mat("#2a2e38"));
-    curb.position.set(0, 0.05, 2.4);
-    this.group.add(curb);
-
-    const count = this.q.buildings;
-    for (let i = 0; i < count; i++) {
-      const w = 2.2 + (i % 4) * 0.7;
-      const h = 6 + ((i * 17) % 14);
-      const d = 2 + (i % 3);
-      const bmat = mat(i % 2 ? "#161a22" : "#10141c", { metalness: 0.35, roughness: 0.5 });
-      if (this.buildTex) bmat.map = this.buildTex;
-      const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), bmat);
-      const side = i % 2 === 0 ? -1 : 1;
-      b.position.set(-18 + (i * 1.9) % 36, h / 2, -6 - (i % 5) * 1.4 + side * 0.2);
-      b.castShadow = true;
-      b.receiveShadow = true;
-      this.group.add(b);
-
-      const neonCol = i % 3 === 0 ? pal[1] : pal[2];
-      const neon = new THREE.Mesh(
-        new THREE.BoxGeometry(w * 0.7, 0.12, 0.08),
-        mat(neonCol, { emissive: neonCol, emissiveIntensity: 1.4 })
-      );
-      neon.position.set(b.position.x, 2 + (i % 5), b.position.z + d / 2 + 0.05);
-      this.group.add(neon);
-      this.signs.push(neon);
-
-      const light = new THREE.PointLight(neonCol, 1.1, 9, 2);
-      light.position.copy(neon.position);
-      this.group.add(light);
+    // All skyline silhouettes come from the supplied Niko kit, not box proxies.
+    const seed = ["street", "rooftop", "alley", "station", "bridge", "plaza"].indexOf(id) * 97 + 11;
+    for (let i = 0; i < this.q.buildings; i++) {
+      const back = i % 2 === 0;
+      const column = Math.floor(i / 2);
+      const x = (column - (Math.ceil(this.q.buildings / 2) - 1) / 2) * 8.5 + (back ? 4.2 : 0);
+      const height = back ? 14 + rand(seed + i) * 12 : 8 + rand(seed + i) * 9;
+      this.place(BUILDINGS[(i + seed) % BUILDINGS.length], x, roof ? -7 : -0.4, back ? -36 - rand(i) * 12 : -22 - rand(i) * 7, height, rand(seed - i) * 0.6 - 0.3);
     }
 
-    for (let i = 0; i < 8; i++) {
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 3.2, 8), mat("#222"));
-      pole.position.set(-10 + i * 3, 1.6, 2.1);
-      this.group.add(pole);
-      const lamp = new THREE.Mesh(
-        new THREE.SphereGeometry(0.14, 10, 8),
-        mat("#ffe08a", { emissive: "#ffcc66", emissiveIntensity: 1.2 })
-      );
-      lamp.position.set(pole.position.x, 3.2, 2.1);
-      this.group.add(lamp);
-      const pl = new THREE.PointLight("#ffd08a", 0.7, 8);
-      pl.position.copy(lamp.position);
-      this.group.add(pl);
-    }
+    if (id === "street") this.street();
+    if (id === "rooftop") this.rooftop();
+    if (id === "alley") this.alley();
+    if (id === "station") this.station();
+    if (id === "bridge") this.bridge();
+    if (id === "plaza") this.plaza();
+    this.mergeStaticDetails();
+    this.buildInstances();
+    this.addTraffic(id === "station");
+    if (stageDef.rain) this.addRain();
 
-    const ring = new THREE.Mesh(
-      new THREE.CircleGeometry(7.5, 40),
-      new THREE.MeshBasicMaterial({ color: pal[2], transparent: true, opacity: 0.07 })
-    );
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.02;
-    this.group.add(ring);
-
-    if (stageDef?.id === "plaza") {
-      const hat = new THREE.Mesh(new THREE.ConeGeometry(1.2, 1.6, 4), mat("#e8c36a", { metalness: 0.5 }));
-      hat.position.set(0, 8.4, -10);
-      this.group.add(hat);
-    }
-
-    if (rainOn) {
-      const geo = new THREE.BufferGeometry();
-      const n = Math.floor(900 * this.q.particles);
-      const pos = new Float32Array(n * 3);
-      for (let i = 0; i < n; i++) {
-        pos[i * 3] = (Math.random() - 0.5) * 40;
-        pos[i * 3 + 1] = Math.random() * 16;
-        pos[i * 3 + 2] = (Math.random() - 0.5) * 18;
-      }
-      geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-      const rain = new THREE.Points(
-        geo,
-        new THREE.PointsMaterial({ color: "#88a0c8", size: 0.035, transparent: true, opacity: 0.55 })
-      );
-      this.group.add(rain);
-      this.rainMesh = rain;
-    }
-
-    this.hemi = new THREE.HemisphereLight("#9bb4d0", "#1a1010", 0.55);
-    this.dir = new THREE.DirectionalLight("#fff3d6", 1.05);
-    this.dir.position.set(6, 14, 8);
-    this.dir.castShadow = this.q.shadows;
-    if (this.q.shadows) {
-      this.dir.shadow.mapSize.set(1024, 1024);
-      this.dir.shadow.camera.near = 1;
-      this.dir.shadow.camera.far = 40;
-      this.dir.shadow.camera.left = -16;
-      this.dir.shadow.camera.right = 16;
-      this.dir.shadow.camera.top = 12;
-      this.dir.shadow.camera.bottom = -4;
-    }
-    this.group.add(this.hemi, this.dir);
-    scene.add(this.group);
-    scene.add(this.fx);
+    const hemi = new THREE.HemisphereLight("#b8d8ff", "#353039", 1.9);
+    const key = new THREE.DirectionalLight("#fff0db", 3.1);
+    key.position.set(-5, 12, 12);
+    key.castShadow = this.q.shadows;
+    key.shadow.mapSize.set(this.q.shadowMap || 1024, this.q.shadowMap || 1024);
+    Object.assign(key.shadow.camera, { near: 1, far: 45, left: -13, right: 13, top: 9, bottom: -5 });
+    key.shadow.bias = -0.0004;
+    key.shadow.normalBias = 0.035;
+    const rim = new THREE.DirectionalLight(this.accent, 2.4);
+    rim.position.set(4, 6, -8);
+    // Two directional lights replace dozens of expensive per-building lights.
+    this.group.add(hemi, key, rim);
+    scene.add(this.group, this.fx);
     this.loaded = true;
   }
 
-  update(dt) {
-    if (this.rainMesh) {
-      const arr = this.rainMesh.geometry.attributes.position.array;
-      for (let i = 0; i < arr.length; i += 3) {
-        arr[i + 1] -= dt * 14;
-        if (arr[i + 1] < 0) arr[i + 1] = 16;
+  material(color, options = {}) {
+    return new THREE.MeshStandardMaterial({ color, metalness: 0.25, roughness: 0.7, ...options });
+  }
+
+  glow(color, intensity = 1) {
+    const m = this.material(color, { emissive: color, emissiveIntensity: intensity, roughness: 0.4 });
+    this.signs.push({ material: m, base: intensity });
+    return m;
+  }
+
+  box(w, h, d, x, y, z, material) {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+    mesh.position.set(x, y, z);
+    mesh.receiveShadow = this.q.shadows;
+    this.group.add(mesh);
+    return mesh;
+  }
+
+  ring(radius, tube, x, y, z, color, opacity = 1) {
+    const mesh = new THREE.Mesh(new THREE.TorusGeometry(radius, tube, 6, 64), new THREE.MeshBasicMaterial({ color, transparent: opacity < 1, opacity, depthWrite: false }));
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(x, y, z);
+    this.group.add(mesh);
+    return mesh;
+  }
+
+  place(name, x, y, z, scale, rotation = 0) {
+    if (!this.batches.has(name)) this.batches.set(name, []);
+    const matrix = new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotation), new THREE.Vector3(scale, scale, scale));
+    this.batches.get(name).push(matrix);
+  }
+
+  kitMaterial(source) {
+    if (!this.materials.has(source.uuid)) {
+      const material = source.clone();
+      material.userData = {};
+      if (source.name === "lights") {
+        material.color.set(this.accent);
+        material.emissive.set(this.accent);
+        material.emissiveIntensity = 1.5;
+      } else if (source.name === "blue" || source.name === "green") {
+        material.color.set(this.secondary).multiplyScalar(0.55);
       }
-      this.rainMesh.geometry.attributes.position.needsUpdate = true;
+      this.materials.set(source.uuid, material);
     }
-    this.signs.forEach((s, i) => {
-      const pulse = 0.8 + Math.sin(performance.now() * 0.004 + i) * 0.4;
-      if (s.material.emissiveIntensity !== undefined) s.material.emissiveIntensity = pulse;
+    return this.materials.get(source.uuid);
+  }
+
+  mergeStaticDetails() {
+    const batches = new Map();
+    for (const mesh of this.group.children) {
+      if (!mesh.isMesh || mesh.isInstancedMesh) continue;
+      const key = `${mesh.material.uuid}-${mesh.receiveShadow}`;
+      if (!batches.has(key)) batches.set(key, []);
+      batches.get(key).push(mesh);
+    }
+    for (const meshes of batches.values()) {
+      if (meshes.length < 2) continue;
+      const geometries = meshes.map((mesh) => {
+        mesh.updateMatrix();
+        return mesh.geometry.clone().applyMatrix4(mesh.matrix);
+      });
+      const merged = new THREE.Mesh(mergeGeometries(geometries), meshes[0].material);
+      merged.receiveShadow = meshes[0].receiveShadow;
+      merged.name = "Arena-static-detail";
+      this.group.add(merged);
+      for (const mesh of meshes) { mesh.removeFromParent(); mesh.geometry.dispose(); }
+      geometries.forEach((geometry) => geometry.dispose());
+    }
+  }
+
+  buildInstances() {
+    for (const [name, matrices] of this.batches) {
+      const template = this.kit.getObjectByName(name);
+      if (!template) throw new Error(`Pieza de ciudad no encontrada: ${name}`);
+      for (const part of template.children) {
+        const mesh = new THREE.InstancedMesh(part.geometry, this.kitMaterial(part.material), matrices.length);
+        mesh.name = `Niko-${part.name}`;
+        matrices.forEach((matrix, i) => mesh.setMatrixAt(i, matrix));
+        mesh.instanceMatrix.needsUpdate = true;
+        mesh.computeBoundingSphere();
+        mesh.castShadow = this.q.shadows && template.userData.kind === "prop";
+        mesh.receiveShadow = this.q.shadows;
+        this.group.add(mesh);
+      }
+    }
+  }
+
+  sign(text, x, y, z, color = this.accent, width = 3.6) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 512; canvas.height = 128;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#091321"; ctx.fillRect(0, 0, 512, 128);
+    ctx.strokeStyle = color; ctx.lineWidth = 5; ctx.strokeRect(4, 4, 504, 120);
+    ctx.fillStyle = new THREE.Color(color).lerp(new THREE.Color("#ffffff"), 0.3).getStyle(); ctx.font = "bold 40px monospace"; ctx.textAlign = "center";
+    ctx.fillText(text, 256, 68);
+    ctx.font = "16px monospace"; ctx.fillStyle = "#92aac1"; ctx.fillText("H O K A G E   /   N E O  C I T Y", 256, 101);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, width / 4), new THREE.MeshBasicMaterial({ map: texture, toneMapped: false }));
+    mesh.position.set(x, y, z);
+    this.group.add(mesh);
+  }
+
+  street() {
+    this.place("hall", -10, 0, -9, 4.5, 0.12);
+    this.place("habitat", 14, 0, -13, 8, -0.3);
+    for (const x of [-9, -5, 5, 9]) this.place("lamp", x, 0, -3.5, 2.8, Math.PI / 2);
+    this.place("terminal", -9.6, 0, -3.5, 1.7);
+    this.sign("KONOHA / 01", -4.8, 4.8, -7, this.secondary, 5);
+    this.sign("NINJA DISTRICT", 8, 3.5, -5.5, this.accent, 4);
+  }
+
+  rooftop() {
+    this.railings();
+    this.place("antenna", -10.2, 0, -4, 5);
+    this.place("generator", 10.2, 0, -3.8, 1.8);
+    this.place("pylon", 9.7, 0, -6, 4);
+    this.ring(2, 0.045, 0, 0.026, 0, this.secondary, 0.55);
+    this.box(1.7, 0.02, 0.15, 0, 0.04, 0, this.glow(this.secondary, 0.65));
+    for (const x of [-0.8, 0.8]) this.box(0.16, 0.02, 1.5, x, 0.04, 0, this.glow(this.secondary, 0.65));
+    this.sign("SKY DOJO / 02", -7.5, 2.8, -4.2, this.secondary);
+  }
+
+  alley() {
+    this.place("habitat", -12, 0, -7.5, 7.5, 0.7);
+    this.place("hangar", 12, 0, -8.5, 9, -1.3);
+    this.place("gateway", -8.5, 0, -3.8, 4.2, Math.PI / 2);
+    this.place("terminal", 8.8, 0, -3.5, 1.6, -0.4);
+    this.place("generator", -9.4, 0, -3.5, 1.4);
+    this.box(22, 0.18, 0.25, 0, 6.3, -6, this.material("#142536"));
+    this.box(21, 0.035, 0.04, 0, 6.18, -5.85, this.glow(this.secondary, 2));
+    this.sign("ICHIRAKU", -7, 4, -4.6, this.secondary, 3.1);
+    this.sign("UNDERGROUND / 03", 5.6, 5.1, -6, this.accent, 4.3);
+  }
+
+  station() {
+    this.place("station", 0, 0, -16, 7.5, 0);
+    for (const x of [-8, 8]) {
+      this.place("canopy", x, 0, -5, 3.5);
+      this.place("terminal", x * 1.15, 0, -3.5, 1.6);
+    }
+    for (const z of [-5.8, -7.5]) this.box(90, 0.07, 0.1, 0, 0.12, z, this.glow(this.accent, 0.7));
+    this.sign("TRANSIT / 04", 0, 3.7, -5.6, this.accent, 4.5);
+  }
+
+  railings() {
+    const metal = this.material("#334b60");
+    for (const z of [-2.9, 2.95]) {
+      const front = z > 0;
+      this.box(21, 0.06, 0.08, 0, front ? 0.14 : 0.75, z, metal);
+      for (const x of [-10, -7, -4, 0, 4, 7, 10]) this.box(0.07, front ? 0.15 : 0.8, 0.08, x, front ? 0.075 : 0.4, z, metal);
+    }
+  }
+
+  bridge() {
+    this.railings();
+    for (const x of [-10.4, 10.4]) {
+      this.place("pylon", x, -0.1, -3.8, 7.5, Math.PI / 2);
+      this.place("antenna", x * 1.7, -4, -10, 12);
+      const cable = this.box(0.08, 10, 0.1, x * 0.55, 3.6, -3.4, this.glow(this.accent, 0.8));
+      cable.rotation.z = Math.sign(x) * -0.95;
+    }
+    this.sign("RAIJIN LINK / 05", 0, 5.7, -8, this.accent, 5);
+  }
+
+  plaza() {
+    this.place("antenna", 0, 0, -8.5, 6.2);
+    this.place("hall", -13, 0, -9.5, 4.5, 0.3);
+    this.place("hall", 13, 0, -9.5, 4.5, -0.3);
+    for (const x of [-7, 7]) this.place("pavilion", x, 0, -5, 2.8);
+    this.ring(2.2, 0.035, 0, 6.4, -8.5, this.secondary, 0.75);
+    this.ring(1.7, 0.025, 0, 6.8, -8.5, this.accent, 0.6);
+    this.sign("HOKAGE MEMORIAL", 0, 3.7, -5.6, this.secondary, 4.4);
+  }
+
+  addTraffic(train) {
+    const template = this.kit.getObjectByName(train ? "shuttle" : "aircraft");
+    for (let i = 0; i < (this.quality === "baja" ? 1 : 2); i++) {
+      const vehicle = template.clone();
+      vehicle.traverse((node) => { if (node.isMesh) node.material = this.kitMaterial(node.material); });
+      const scale = train ? 5 : 2.2;
+      vehicle.scale.setScalar(scale);
+      vehicle.position.set(-25 + i * 35, train ? 0.55 : 8 + i * 5, train ? -6.5 : -16 - i * 8);
+      vehicle.rotation.y = Math.PI / 2;
+      this.group.add(vehicle);
+      this.traffic.push({ mesh: vehicle, speed: train ? 5 : 2.6 + i });
+    }
+  }
+
+  addRain() {
+    const count = Math.floor(650 * this.q.particles);
+    const positions = new Float32Array(count * 6);
+    for (let i = 0; i < count; i++) {
+      const x = rand(i + 100) * 42 - 21;
+      const y = rand(i + 200) * 18;
+      const z = rand(i + 300) * 26 - 18;
+      positions.set([x, y, z, x - 0.025, y - 0.3, z], i * 6);
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage));
+    this.rainMesh = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color: "#8cbddd", transparent: true, opacity: 0.22, depthWrite: false }));
+    this.group.add(this.rainMesh);
+  }
+
+  update(dt) {
+    this.time += dt;
+    if (this.rainMesh) {
+      const attribute = this.rainMesh.geometry.attributes.position;
+      const arr = attribute.array;
+      for (let i = 0; i < arr.length; i += 6) {
+        arr[i + 1] -= dt * 13;
+        if (arr[i + 1] < -1) arr[i + 1] = 18;
+        arr[i + 4] = arr[i + 1] - 0.3;
+      }
+      attribute.needsUpdate = true;
+    }
+    this.signs.forEach(({ material, base }, i) => { material.emissiveIntensity = base * (0.94 + Math.sin(this.time * 1.4 + i) * 0.06); });
+    this.traffic.forEach(({ mesh, speed }) => {
+      mesh.position.x += speed * dt;
+      if (mesh.position.x > 42) mesh.position.x = -42;
     });
   }
 
   clear() {
-    this.renderer.scene.remove(this.group);
-    this.renderer.scene.remove(this.fx);
+    // FX owns its transient geometry; Game clears it before replacing a stage.
+    disposeTree(this.group);
+    disposeTree(this.fx);
     this.group = new THREE.Group();
     this.fx = new THREE.Group();
-    this.signs = [];
     this.rainMesh = null;
+    this.signs = [];
+    this.traffic = [];
+    this.loaded = false;
   }
 }

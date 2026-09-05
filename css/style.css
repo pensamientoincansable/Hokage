@@ -1,3 +1,9 @@
+@import "./symbols.css";
+@import "@fontsource/teko/500.css";
+@import "@fontsource/orbitron/500.css";
+@import "@fontsource/orbitron/700.css";
+@import "@fontsource/cinzel/600.css";
+
 :root {
   --bg: #07080d;
   --ink: #f4ead8;
@@ -27,7 +33,7 @@ body,
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: var(--bg) url("../assets/img/menu-bg.jpg") center/cover no-repeat;
+  background: var(--bg);
   color: var(--ink);
   font-family: "Noto Sans JP", system-ui, sans-serif;
 }
@@ -615,64 +621,6 @@ kbd.listen {
   color: var(--cyan);
 }
 
-/* TOUCH */
-#touch {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 8;
-}
-
-.touch-group {
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: 8px;
-  pointer-events: none;
-  height: 210px;
-}
-
-.touch-group.actions {
-  left: auto;
-  width: 300px;
-}
-
-.touch-btn {
-  pointer-events: auto;
-  position: absolute;
-  width: 62px;
-  height: 62px;
-  border-radius: 50%;
-  border: 1px solid var(--line);
-  background: rgba(10, 12, 20, 0.6);
-  color: var(--gold);
-  font-family: Orbitron, sans-serif;
-  font-size: 12px;
-  backdrop-filter: blur(4px);
-  touch-action: manipulation;
-}
-
-.touch-btn:active {
-  background: rgba(232, 195, 106, 0.3);
-  transform: scale(0.92);
-}
-
-.touch-btn.small {
-  width: 52px;
-  height: 52px;
-  font-size: 10px;
-}
-
-.touch-btn.ult {
-  border-color: var(--crimson);
-  color: #fff;
-  background: rgba(200, 30, 58, 0.55);
-}
-
-@media (min-width: 901px) {
-  #touch { display: none; }
-}
-
 @media (max-width: 900px) {
   #menu { padding: 20px; }
   .menu-nav .btn { min-width: 0; width: 100%; }
@@ -704,4 +652,75 @@ kbd.listen {
   .preset-grid {
     grid-template-columns: 1fr 1fr;
   }
+}
+
+/* Input surfaces keep browser gestures in menus, never during a held action. */
+body { overscroll-behavior: none; }
+#app { height: 100dvh; }
+#game-canvas { touch-action: none; outline: none; }
+input[type="text"] { user-select: text; min-width: 0; max-width: 100%; }
+button, select, input { touch-action: manipulation; }
+button:focus-visible, select:focus-visible, input:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 3px;
+}
+#ui-root .pass-through, #ui-root .pass-through * { pointer-events: none; }
+#ui-root .pass-through button, #ui-root .pause-menu, #ui-root .result { pointer-events: auto; }
+#toasts { pointer-events: none; max-width: min(380px, 85vw); }
+.keybind-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px; }
+.keybind-key {
+  min-width: 95px;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  padding: 6px 10px;
+  color: var(--gold);
+  background: #0d1727;
+  font: 12px Orbitron, sans-serif;
+  cursor: pointer;
+}
+.keybind-key.listen { border-color: var(--cyan); color: var(--cyan); animation: pulse 0.8s infinite; }
+.section-title { margin: 22px 0 10px; font-size: 16px; }
+.animation-preview { border-block: 1px solid var(--line); padding: 14px 0; margin: 16px 0; }
+.animation-preview > span { display: block; color: var(--cyan); font: 10px Orbitron, sans-serif; letter-spacing: 0.15em; margin-bottom: 10px; }
+.animation-preview .chip { padding: 10px; min-height: 40px; }
+.asset-note { color: var(--muted); font-size: 12px; line-height: 1.8; margin-top: 16px; }
+.field > label { display: block; font-size: 12px; color: var(--gold); margin-bottom: 8px; }
+.menu-sub { color: #bdcbd4; font-size: 11px; letter-spacing: 0.22em; }
+.menu-nav .btn { backdrop-filter: blur(8px); }
+
+@media (max-width: 600px) {
+  #menu { padding: max(18px, env(safe-area-inset-top)) 20px max(16px, env(safe-area-inset-bottom)); }
+  .menu-top { gap: 10px; }
+  .menu-top img { width: 48px; height: 48px; }
+  .menu-kicker { font-size: 9px; letter-spacing: 0.2em; }
+  .menu-title { font-size: 40px; }
+  .menu-sub { font-size: 9px; letter-spacing: 0.08em; }
+  .menu-nav { width: 100%; max-width: 350px; }
+  .menu-nav .btn { min-height: 48px; font-size: 11px; padding: 12px 16px; }
+  .menu-footer { flex-direction: column; gap: 7px; font-size: 10px; }
+  .keybind-grid { grid-template-columns: 1fr; }
+  .row { gap: 10px; }
+  .row label { max-width: 55%; font-size: 12px; }
+  .row label .hint { font-size: 10px; }
+  .row input[type="range"] { width: 40%; }
+  .row select { max-width: 50%; font-size: 11px; }
+  .sheet { max-height: calc(100dvh - 28px); }
+  #campaign { padding: max(18px, env(safe-area-inset-top)) 16px 16px; }
+  .gold-title { letter-spacing: 0.1em; }
+  .editor-side { padding: 14px; }
+  .credits { padding: 20px; max-height: 92dvh; overflow: auto; }
+}
+@media (max-height: 520px) and (orientation: landscape) {
+  #menu { padding: 16px 28px; }
+  .menu-top img { width: 42px; height: 42px; }
+  .menu-title { font-size: 36px; }
+  .menu-kicker { font-size: 9px; }
+  .menu-sub { font-size: 9px; }
+  .menu-nav { gap: 5px; }
+  .menu-nav .btn { padding: 9px 16px; font-size: 10px; min-height: 37px; }
+  .menu-footer { font-size: 9px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .boot-logo, .keybind-key.listen { animation: none; }
+  .btn, .bar > i, .bar > b { transition: none; }
 }

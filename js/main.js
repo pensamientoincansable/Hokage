@@ -1,15 +1,20 @@
 import { Game } from "./game.js";
 
-const game = new Game();
-game.start().catch((err) => {
-  console.error(err);
-  const ui = document.getElementById("ui-root");
-  if (ui) {
+async function start() {
+  try {
+    const game = new Game();
+    window.__hokage = game;
+    await game.start();
+  } catch (error) {
+    console.error(error);
+    const ui = document.getElementById("ui-root");
     ui.innerHTML = `<div class="screen overlay"><div class="panel sheet">
-      <h2 class="gold-title">Error al iniciar</h2>
-      <p class="lead">${String(err)}</p>
+      <h2 class="gold-title">No se pudo iniciar</h2>
+      <p class="lead" id="boot-error"></p>
+      <button class="btn primary" id="retry-boot">Volver a intentar</button>
     </div></div>`;
+    document.getElementById("boot-error").textContent = error.message || String(error);
+    document.getElementById("retry-boot").addEventListener("click", () => location.reload());
   }
-});
-
-window.__hokage = game;
+}
+start();

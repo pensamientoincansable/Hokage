@@ -9,7 +9,10 @@ export class AudioEngine {
   }
 
   unlock() {
-    if (this.ctx) return;
+    if (this.ctx) {
+      if (this.ctx.state === "suspended") this.ctx.resume().catch(() => {});
+      return;
+    }
     const Ctx = window.AudioContext || window.webkitAudioContext;
     if (!Ctx) return; // Sin Web Audio disponible: el juego sigue funcionando en silencio.
     this.ctx = new Ctx();
@@ -20,6 +23,10 @@ export class AudioEngine {
     this.sfxGain.connect(this.master);
     this.master.connect(this.ctx.destination);
     this.apply();
+  }
+
+  suspend() {
+    this.ctx?.suspend().catch(() => {});
   }
 
   apply() {
@@ -34,7 +41,7 @@ export class AudioEngine {
   }
 
   tone(freq, dur = 0.12, type = "square", gain = 0.08, dest = "sfx") {
-    if (!this.ctx) return;
+    if (!this.ctx || this.ctx.state !== "running") return;
     const t = this.ctx.currentTime;
     const o = this.ctx.createOscillator();
     const g = this.ctx.createGain();
@@ -48,8 +55,8 @@ export class AudioEngine {
     o.stop(t + dur + 0.02);
   }
 
-  noise(dur = 0.08, gain = 0.05) {
-    if (!this.ctx) return;
+  noise(dur = 0.08, gain = 0.05, dest = "sfx") {
+    if (!this.ctx || this.ctx.state !== "running") return;
     const t = this.ctx.currentTime;
     const buffer = this.ctx.createBuffer(1, this.ctx.sampleRate * dur, this.ctx.sampleRate);
     const data = buffer.getChannelData(0);
@@ -63,7 +70,7 @@ export class AudioEngine {
     g.gain.value = gain;
     src.connect(f);
     f.connect(g);
-    g.connect(this.sfxGain);
+    g.connect(dest === "music" ? this.musicGain : this.sfxGain);
     src.start(t);
   }
 
@@ -102,7 +109,7 @@ export class AudioEngine {
     const scale = theme === "fight" ? [110, 146, 164, 196, 220, 246] : [130, 146, 164, 196, 220, 261];
     const beat = () => {
       if (!this.music.playing) return;
-      this.noise(0.04, theme === "fight" ? 0.045 : 0.02);
+      this.noise(0.04, theme === "fight" ? 0.045 : 0.02, "music");
       this.tone(70, 0.08, "sine", 0.04, "music");
     };
     const melody = () => {
