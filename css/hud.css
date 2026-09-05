@@ -312,3 +312,74 @@
 @keyframes dmg {
   to { transform: translateX(-50%) translateY(-46px); opacity: 0; }
 }
+
+/* Match framing and reachable tools on every viewport. */
+#hud { z-index: 10; }
+.hud-top { padding-top: max(14px, env(safe-area-inset-top)); padding-left: max(22px, env(safe-area-inset-left)); padding-right: max(22px, env(safe-area-inset-right)); }
+.fighter-hud { min-width: 0; }
+.fname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.felems { flex-shrink: 0; }
+.timer { padding: 8px 4px; background: linear-gradient(180deg, #0b172bdd, #0b172b11); border-top: 2px solid var(--gold); }
+.timer .round { font-size: 12px; letter-spacing: 0.12em; }
+.bar { border-color: #41515f; height: 17px; }
+.bar.chakra { height: 9px; border-color: #34536b; }
+.stage-label { position: absolute; top: 117px; left: max(24px, env(safe-area-inset-left)); color: #d1e5ef; font: 10px Orbitron, sans-serif; letter-spacing: 0.09em; text-shadow: 0 2px 8px #000; }
+.stage-label span { display: block; font-size: 8px; letter-spacing: 0.18em; color: #7f9bab; margin-top: 6px; }
+.hud-tools { position: absolute; top: 117px; right: max(24px, env(safe-area-inset-right)); display: flex; gap: 8px; }
+.hud-tools button { width: 44px; height: 44px; border: 1px solid #647d9388; color: #d6e8f3; background: #0f2031bb; border-radius: 10px; font: 24px system-ui, sans-serif; cursor: pointer; }
+.combo { top: 163px; }
+.help-strip { width: min(96%, 1150px); white-space: normal; text-align: center; line-height: 1.8; font: 10px Orbitron, sans-serif; color: #b7cfda; }
+#pause-slot:not(:empty) { position: absolute; inset: 0; z-index: 30; display: flex; background: #060e1acc; backdrop-filter: blur(8px); }
+#result-slot:not(:empty) { position: absolute; inset: 0; z-index: 31; }
+.pause-menu { max-height: 92dvh; overflow-y: auto; }
+.pause-menu .lead { color: var(--muted); font: 13px system-ui, sans-serif; margin-bottom: 12px; }
+.result { padding: 24px; text-align: center; gap: 16px; }
+.result .actions { justify-content: center; }
+.result h2 { letter-spacing: 0.08em; }
+@media (max-width: 600px) {
+  .hud-top { grid-template-columns: minmax(0, 1fr) 66px minmax(0, 1fr); gap: 7px; padding: max(10px, env(safe-area-inset-top)) 12px 0; }
+  .fighter-hud { gap: 5px; }
+  .name-row { display: block; min-height: 41px; }
+  .fname { font-size: 17px; letter-spacing: 0.025em; }
+  .felems { font-size: 10px; letter-spacing: 0.03em; }
+  .timer { padding: 6px 2px; }
+  .timer .t { font-size: 44px; }
+  .timer .round { font-size: 9px; letter-spacing: 0.05em; }
+  .wave-info { font-size: 10px; letter-spacing: 0; }
+  .bar { height: 12px; }
+  .bar.chakra { height: 6px; }
+  .st { font-size: 7px; padding: 1px 4px; }
+  .status-row { gap: 3px; }
+  .stage-label { left: 12px; top: 116px; max-width: 60%; font-size: 8px; }
+  .stage-label span { font-size: 7px; margin-top: 5px; }
+  .hud-tools { right: 12px; top: 113px; gap: 6px; }
+  .combo { left: 14px; top: 162px; font-size: 32px; }
+  .combo small { font-size: 12px; }
+  .announcer { font-size: clamp(25px, 7vw, 48px); letter-spacing: 0.05em; text-align: center; width: 94%; }
+  .vs-intro { padding: 18px; grid-template-columns: 1fr 38px 1fr; gap: 8px; }
+  .vs-card h3 { font-size: 16px; letter-spacing: 0.02em; text-align: center; }
+  .vs-card .felems { font-size: 9px; text-align: center; }
+  .vs-mark { font-size: 30px; }
+  .pause-menu { padding: 20px; }
+}
+@media (max-height: 520px) and (orientation: landscape) {
+  .hud-top { grid-template-columns: minmax(0, 1fr) 84px minmax(0, 1fr); gap: 12px; padding-top: max(6px, env(safe-area-inset-top)); }
+  .fighter-hud { gap: 3px; }
+  .fname { font-size: 19px; }
+  .bar { height: 12px; }
+  .bar.chakra { height: 6px; }
+  .timer { padding-top: 3px; }
+  .timer .t { font-size: 42px; }
+  .timer .round { font-size: 9px; }
+  .wave-info { display: none; }
+  .stage-label { top: 76px; font-size: 8px; }
+  .stage-label span { display: none; }
+  .hud-tools { top: 79px; }
+  .combo { top: 95px; font-size: 28px; }
+  .combo small { font-size: 12px; }
+  .st { font-size: 7px; }
+  .announcer { top: 40%; font-size: 38px; }
+  .vs-card img { width: min(180px, 33vh); height: min(180px, 33vh); }
+  .vs-card h3 { font-size: 20px; }
+}
+.hud-tools svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; vertical-align: middle; }

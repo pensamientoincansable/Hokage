@@ -1,0 +1,121 @@
+{
+  "sources": {
+    "Naruto/model.dae": "a436181065696cbb23f9269f6eda5d505feddab7103d05748a339cec7362cec7",
+    "Naruto/Texture_0_CMP.png": "b2b3b7cfb2fa790194c2889402701dbd5f932311458b93e2e25cd1aa5fcc37ec",
+    "Naruto/Texture_1_CMP.png": "ae898ef4b1fd4afd18f4e86507df6f617a1726cb30b7729a44aec2a059a0d448",
+    "Naruto/Texture_2_CMP.png": "f040858a1a690e3fb5eb5eff7dd588d0c10fa30097c3cfc0c592409eee94c2ad",
+    "Naruto/Texture_3_CMP.png": "b5148fe54d00137c8ea6258f6ef17e5e65148f936dde5d1d86b47b3f3057801e",
+    "assets/futuristic low poly city by niko.fbx": "adc996577b6d0d52fb679bcda8eff42cab6a52a84399359aa99344d3ca10bced",
+    "assets/img/logo.png": "5a085b53b9220d95cf124d1cce742efe2230502cb8d791054c58b6c7a69f7174"
+  },
+  "outputs": {
+    "naruto.glb": {
+      "bytes": 262392,
+      "sha256": "424b05c6e400c5fa4a398229d413d913f768a8b77de38f57090def6b16d31fe5"
+    },
+    "niko-city-kit.glb": {
+      "bytes": 1830988,
+      "sha256": "b01a431aac412adce5947f576bbdbf32df84afb948b8d3398c42f301f11939be"
+    },
+    "../img/naruto-portrait.png": {
+      "bytes": 106322,
+      "sha256": "83c66cb1338a67d8cd1910851b75bb8bb28880035b90364fe98b5f6ab567c4c7"
+    },
+    "../img/logo-ui.webp": {
+      "bytes": 15810,
+      "sha256": "5d8f8d77b57e86b1cb2bb9c8b3ecda9fb05892dcc470c3d61c1bebbff3138582"
+    }
+  },
+  "cityParts": [
+    {
+      "name": "tower-ring",
+      "sourceName": "Cube028",
+      "kind": "building"
+    },
+    {
+      "name": "tower-needle",
+      "sourceName": "Cube032",
+      "kind": "building"
+    },
+    {
+      "name": "tower-block",
+      "sourceName": "Cube021",
+      "kind": "building"
+    },
+    {
+      "name": "tower-spire",
+      "sourceName": "Cube031",
+      "kind": "building"
+    },
+    {
+      "name": "hall",
+      "sourceName": "Cube003",
+      "kind": "building"
+    },
+    {
+      "name": "station",
+      "sourceName": "Cube064",
+      "kind": "building"
+    },
+    {
+      "name": "habitat",
+      "sourceName": "Cube026",
+      "kind": "building"
+    },
+    {
+      "name": "hangar",
+      "sourceName": "Cube022",
+      "kind": "building"
+    },
+    {
+      "name": "pavilion",
+      "sourceName": "Cube037",
+      "kind": "prop"
+    },
+    {
+      "name": "canopy",
+      "sourceName": "Cube038",
+      "kind": "prop"
+    },
+    {
+      "name": "gateway",
+      "sourceName": "Cube004",
+      "kind": "prop"
+    },
+    {
+      "name": "terminal",
+      "sourceName": "Cube054",
+      "kind": "prop"
+    },
+    {
+      "name": "lamp",
+      "sourceName": "Cube055",
+      "kind": "prop"
+    },
+    {
+      "name": "generator",
+      "sourceName": "Cube056",
+      "kind": "prop"
+    },
+    {
+      "name": "antenna",
+      "sourceName": "Cube009",
+      "kind": "prop"
+    },
+    {
+      "name": "pylon",
+      "sourceName": "Cube035",
+      "kind": "prop"
+    },
+    {
+      "name": "shuttle",
+      "sourceName": "Cube017",
+      "kind": "vehicle"
+    },
+    {
+      "name": "aircraft",
+      "sourceName": "Cube016",
+      "kind": "vehicle"
+    }
+  ]
+}

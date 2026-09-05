@@ -38,7 +38,9 @@ export class Fighter {
     this.jumpBuffer = 0;
     this.walkDir = 0;
     this.upHold = false;
-    this.cd = { special1: 0, special2: 0, ultimate: 0 };
+    this.cd = { special1: 0, special2: 0, ultimate: 0, dash: 0 };
+    this.dashTime = 0;
+    this.bufferedAction = null;
     this.combo = 0;
     this.air = false;
     this.crouch = false;
@@ -100,6 +102,7 @@ export class Match {
     this.interlude = false;
     this.combo = 0;
     this.comboTimer = 0;
+    this.comboOwner = null;
     this.comboRank = "";
     this.events = [];
     this.shake = 0;
@@ -112,13 +115,9 @@ export class Match {
   }
 
   face() {
-    if (this.p1.x <= this.p2.x) {
-      if (this.p1.state !== "hurt" && this.p1.alive) this.p1.facing = 1;
-      if (this.p2.state !== "hurt" && this.p2.alive) this.p2.facing = -1;
-    } else {
-      if (this.p1.alive) this.p1.facing = -1;
-      if (this.p2.alive) this.p2.facing = 1;
-    }
+    const direction = this.p1.x <= this.p2.x ? 1 : -1;
+    if (this.p1.alive && this.p1.animLock <= 0) this.p1.facing = direction;
+    if (this.p2.alive && this.p2.animLock <= 0) this.p2.facing = -direction;
   }
 
   canAct(f) {
@@ -127,16 +126,21 @@ export class Match {
 
   startMove(f, id) {
     const mv = MOVES[id];
-    if (!mv) return;
+    if (!mv || !this.canAct(f)) return false;
     f.state = id;
-    f.move = { ...mv, id };
+    f.blocking = false;
+    f.pendingSpec = null;
+    f.move = { ...mv, id, damage: mv.damage * f.dmgOut() };
     f.timer = 0;
     f.animLock = mv.startup + mv.active + mv.recovery;
     f.attackHit = false;
-    f.ninja.animator.play(id, f.animLock);
+    f.ninja.animator.play(id, f.animLock, true);
+    this.onEvent({ type: "attack", fighter: f, move: id });
+    return true;
   }
 
   special(f, which) {
+    if (!this.canAct(f)) return false;
     let spec;
     if (which === 3) {
       spec = { ...f.ult };
@@ -149,14 +153,19 @@ export class Match {
     if (f.cd[key] > 0) return;
     const cost = spec.chakra ?? 24;
     if (f.chakra < cost) return;
+    spec.color ||= which === 2 ? f.el2.color : f.el1.color;
+    f.move = null;
+    f.blocking = false;
+    f.attackHit = false;
     f.chakra -= cost;
     f.cd[key] = spec.cooldown ?? 1.2;
     f.state = which === 3 ? "ultimate" : "special";
     f.animLock = which === 3 ? 0.7 : 0.45;
     f.timer = 0;
     f.pendingSpec = { spec, delay: which === 3 ? 0.28 : 0.16 };
-    f.ninja.animator.play(f.state, f.animLock);
+    f.ninja.animator.play(f.state, f.animLock, true);
     this.onEvent({ type: "special", fighter: f, spec });
+    return true;
   }
 
   spawnSpec(f, spec) {
@@ -183,21 +192,17 @@ export class Match {
     } else if (spec.type === "dash") {
       f.vx = (spec.speed || 14) * f.facing;
       f.invuln = 0.12;
+      f.dashTime = 0.2;
       f.state = "dash";
-      this.tryHit(
-        f,
-        opp,
-        {
-          damage: spec.damage * f.dmgOut(),
-          hitstun: spec.hitstun || 0.45,
-          knock: 4,
-          range: 1.7,
-          height: 1.4,
-          chip: 3,
-          statuses,
-        },
-        true
-      );
+      f.animLock = 0.32;
+      f.timer = 0;
+      f.attackHit = false;
+      f.move = {
+        damage: spec.damage * f.dmgOut(), hitstun: spec.hitstun || 0.45,
+        knock: 4, range: 1.7, height: 1.4, chip: 3, statuses,
+        startup: 0, active: 0.2, recovery: 0.12,
+      };
+      f.ninja.animator.play("dash", 0.32, true);
     } else if (spec.type === "trap") {
       this.traps.push({
         x: opp.x,
@@ -233,7 +238,7 @@ export class Match {
   }
 
   tryHit(atk, def, mv, force = false) {
-    if (atk.attackHit && !force) return false;
+    if (!atk.alive || !def.alive || def.invuln > 0 || this.over || (atk.attackHit && !force)) return false;
     const dx = (def.x - atk.x) * atk.facing;
     const dy = Math.abs(def.y - atk.y);
     if (dx > 0.15 && dx < mv.range && dy < mv.height) {
@@ -269,17 +274,19 @@ export class Match {
   }
 
   applyHit(def, atk, damage, hitstun, knock, blocked, chip = 1, statuses = null) {
-    if (def.invuln > 0 || !def.alive) return;
+    if (this.over || def.invuln > 0 || !def.alive) return false;
     if (blocked) {
-      def.hp = Math.max(1, def.hp - chip);
+      def.hp = Math.max(Math.min(1, def.hp), def.hp - chip);
       def.blockstun = 0.18;
       def.vx = def.facing * -1.2;
       def.chakra = Math.min(100, def.chakra + 3);
       atk.chakra = Math.min(100, atk.chakra + 2);
       this.onEvent({ type: "block", atk, def });
       this.hitstop = 0.04;
-      return;
+      return true;
     }
+    if (this.comboOwner !== atk) this.combo = 0;
+    this.comboOwner = atk;
     const shielded = def.buffs.shield > 0;
     let scaled = damage;
     scaled *= 1 - Math.min(0.45, this.combo * 0.06);
@@ -292,7 +299,13 @@ export class Match {
     def.hitstun = hitstun;
     def.state = "hurt";
     def.animLock = hitstun;
-    def.ninja.animator.play("hurt", hitstun);
+    def.ninja.animator.play("hurt", hitstun, true);
+    def.move = null;
+    def.pendingSpec = null;
+    def.bufferedAction = null;
+    def.dashTime = 0;
+    def.walkDir = 0;
+    def.blocking = false;
     def.vx = atk.facing * knock * (statuses && statuses.includes("gust") ? STATUS.gust.knock : 1);
     def.vy = def.y > 0 ? 2.5 : 1.2;
     def.crouch = false;
@@ -307,14 +320,21 @@ export class Match {
     this.shake = 0.18 + Math.min(0.25, scaled * 0.01);
     this.onEvent({ type: "hit", atk, def, damage: scaled, x: def.x, y: def.y + 1.2 });
     if (def.hp <= 0) this.ko(def, atk);
+    return true;
   }
 
   ko(def, atk) {
+    if (this.over || !def.alive) return;
     def.alive = false;
     def.hp = 0;
     def.state = "ko";
-    def.ninja.animator.play("ko", 3);
-    atk.ninja.animator.play("win", 3);
+    for (const fighter of [def, atk]) {
+      fighter.move = null; fighter.pendingSpec = null; fighter.bufferedAction = null;
+      fighter.walkDir = 0; fighter.dashTime = 0; fighter.statuses = [];
+    }
+    atk.state = "win";
+    def.ninja.animator.play("ko", 3, true);
+    atk.ninja.animator.play("win", 3, true);
     this.over = true;
     this.winner = atk;
     this.onEvent({ type: "ko", winner: atk, loser: def });
@@ -347,71 +367,76 @@ export class Match {
     this.onEvent({ type: "pickup", fighter: f, pickup: P });
   }
 
-  control(f, input, dt = 0.016) {
-    if (this.intro > 0 || !f.alive) return;
-    if (this.over && !this.interlude) return;
-    if (f.hitstun > 0 || f.blockstun > 0 || f.freeze > 0) {
-      f.walkDir = 0;
-      return;
+  control(f, input, dt = 1 / 60) {
+    if (this.intro > 0 || !f.alive || (this.over && !this.interlude)) return;
+    f.upHold = !!input.up;
+    f.walkDir = 0;
+    if (input.jump) f.jumpBuffer = 0.13;
+    if (!this.interlude) {
+      const action = ["ultimate", "special2", "special1", "kick", "heavy", "light", "dash"].find((key) => input[key]);
+      if (action) f.bufferedAction = { action, remaining: 0.14, direction: input.dashDirection || Math.sign(input.axis) || f.facing };
     }
+    if (this.hitstop > 0 || f.hitstun > 0 || f.blockstun > 0 || f.freeze > 0) return;
 
+    const axis = Math.max(-1, Math.min(1, input.axis || 0));
     f.blocking = !!input.block && f.y <= 0 && f.animLock <= 0;
     f.crouch = !!input.down && f.y <= 0 && !f.blocking && f.animLock <= 0;
-    f.upHold = !!input.up;
-    const axis = input.axis || 0;
-    f.walkDir = 0;
-
-    if (input.jump) f.jumpBuffer = 0.13;
-    if (f.jumpBuffer > 0 && (f.y <= 0 || f.coyote > 0)) {
+    if (f.jumpBuffer > 0 && f.animLock <= 0 && (f.y <= 0 || f.coyote > 0)) {
       f.vy = JUMP_VY;
       f.y = 0.02;
       f.jumpBuffer = 0;
       f.coyote = 0;
-      f.ninja.animator.play("jump", 0);
+      f.blocking = false;
+      f.crouch = false;
+      f.state = "jump";
+      f.ninja.animator.play("jump", 0, true);
       this.onEvent({ type: "jump", fighter: f });
     }
     if (input.upReleased && f.y > 0.1 && f.vy > 0) f.vy *= 0.45;
 
-    if (input.dash && f.y <= 0) {
-      f.vx = DASH_SPEED * (axis || f.facing) * f.spd();
-      f.state = "dash";
-      f.animLock = 0.18;
-      f.ninja.animator.play("dash", 0.18);
-      f.invuln = 0.1;
-    }
-
-    if (f.animLock <= 0) {
-      if (input.ultimate) this.special(f, 3);
-      else if (input.special2) this.special(f, 2);
-      else if (input.special1) this.special(f, 1);
-      else if (input.kick) this.startMove(f, f.y > 0.2 ? "airKick" : "kick");
-      else if (input.heavy) this.startMove(f, "heavy");
-      else if (input.light) this.startMove(f, f.crouch ? "crouchLight" : "light");
-    }
-
-    if (f.animLock <= 0 && f.y <= 0) {
-      if (f.blocking) {
-        f.state = "block";
-        f.ninja.animator.play("block");
-      } else if (f.crouch) {
-        f.state = "crouch";
-        f.ninja.animator.play("crouch");
-      } else if (axis) {
-        f.walkDir = axis;
-        f.state = "walk";
-        f.ninja.animator.play("walk");
-      } else {
-        f.state = "idle";
-        f.ninja.animator.play("idle");
+    if (f.animLock <= 0 && f.bufferedAction && !this.interlude) {
+      const { action, direction } = f.bufferedAction;
+      f.bufferedAction = null;
+      if (action === "ultimate") this.special(f, 3);
+      else if (action === "special2") this.special(f, 2);
+      else if (action === "special1") this.special(f, 1);
+      else if (action === "kick") this.startMove(f, f.y > 0.2 ? "airKick" : "kick");
+      else if (action === "heavy") this.startMove(f, "heavy");
+      else if (action === "light") this.startMove(f, f.crouch ? "crouchLight" : "light");
+      else if (action === "dash" && f.y <= 0 && f.cd.dash <= 0) {
+        f.vx = DASH_SPEED * direction * f.spd();
+        f.state = "dash";
+        f.move = null;
+        f.blocking = false;
+        f.crouch = false;
+        f.animLock = 0.18;
+        f.dashTime = 0.18;
+        f.cd.dash = 0.48;
+        f.invuln = 0.1;
+        f.ninja.animator.play("dash", 0.18, true);
       }
-    } else if (f.animLock <= 0 && f.y > 0) {
-      f.walkDir = axis;
-      f.ninja.animator.play("jump");
     }
+    if (f.animLock <= 0) {
+      f.move = null;
+      if (f.y > 0) { f.walkDir = axis; f.state = "jump"; }
+      else if (f.blocking) f.state = "block";
+      else if (f.crouch) f.state = "crouch";
+      else if (axis) { f.walkDir = axis; f.state = "walk"; }
+      else f.state = "idle";
+      f.ninja.animator.play(f.state);
+    }
+    void dt;
   }
 
   physics(f, dt) {
+    if (!f.alive) { f.ninja.update(dt, {}); f.sync(); return; }
+    const previousTimer = f.timer;
     f.timer += dt;
+    f.dashTime = Math.max(0, f.dashTime - dt);
+    if (f.bufferedAction) {
+      f.bufferedAction.remaining -= dt;
+      if (f.bufferedAction.remaining <= 0) f.bufferedAction = null;
+    }
     f.animLock = Math.max(0, f.animLock - dt);
     f.hitstun = Math.max(0, f.hitstun - dt);
     f.blockstun = Math.max(0, f.blockstun - dt);
@@ -427,7 +452,7 @@ export class Match {
     for (let i = f.statuses.length - 1; i >= 0; i--) {
       const s = f.statuses[i];
       s.until -= dt;
-      if (s.id === "burn" && s.until > 0) {
+      if (s.id === "burn" && s.until > 0 && !this.interlude) {
         s.tick += dt;
         const interval = 0.5;
         while (s.tick >= interval) {
@@ -437,7 +462,7 @@ export class Match {
       }
       if (s.until <= 0) f.statuses.splice(i, 1);
     }
-    if (f.hp <= 0 && f.alive) this.ko(f, f.lastHitBy || this.other(f));
+    if (f.hp <= 0 && f.alive) { this.ko(f, f.lastHitBy || this.other(f)); return; }
 
     if (f.freeze > 0) f.vx *= 0.25;
 
@@ -457,7 +482,9 @@ export class Match {
 
     // Movimiento horizontal con aceleración (más natural que velocidad instantánea).
     const spd = f.spd();
-    if (f.y <= 0) {
+    if (f.dashTime > 0) {
+      // Preserve the dash impulse during its active frames, not ground friction.
+    } else if (f.y <= 0) {
       const target = f.walkDir * WALK_SPEED * spd;
       const rate = f.walkDir !== 0 ? 1 - Math.exp(-GROUND_ACCEL * dt) : 1 - Math.exp(-GROUND_FRICTION * dt);
       f.vx += (target - f.vx) * rate;
@@ -478,23 +505,25 @@ export class Match {
         this.spawnSpec(f, spec);
       }
     }
-    if (f.move && f.alive) {
+    if (f.move && f.alive && !this.over) {
       const mv = f.move;
-      if (f.timer >= mv.startup && f.timer <= mv.startup + mv.active) {
+      if (f.timer >= mv.startup && previousTimer < mv.startup + mv.active) {
         this.tryHit(f, this.other(f), mv);
       }
     }
-    f.ninja.update(dt, { flash: f.flash > 0 });
+    f.ninja.update(dt, { flash: f.flash > 0, height: f.y });
     f.sync();
   }
 
   stepProjectiles(dt) {
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
+      if (this.over) return;
       const p = this.projectiles[i];
       p.life -= dt;
+      const previousX = p.x;
       p.x += p.vx * dt;
       const def = this.other(p.owner);
-      if (Math.abs(p.x - def.x) < 0.55 + (p.size || 0.3) && Math.abs(p.y - (def.y + 1.1)) < 0.7) {
+      if (def.x >= Math.min(previousX, p.x) - 0.55 - (p.size || 0.3) && def.x <= Math.max(previousX, p.x) + 0.55 + (p.size || 0.3) && Math.abs(p.y - (def.y + 1.1)) < 0.7 && def.invuln <= 0) {
         const blocked = def.blocking && def.facing !== Math.sign(p.vx);
         this.applyHit(def, p.owner, p.damage, p.hitstun, p.knock, blocked, p.chip, p.statuses);
         this.projectiles.splice(i, 1);
@@ -503,6 +532,7 @@ export class Match {
       if (p.life <= 0 || p.x < ARENA.minX - 2 || p.x > ARENA.maxX + 2) this.projectiles.splice(i, 1);
     }
     for (let i = this.traps.length - 1; i >= 0; i--) {
+      if (this.over) return;
       const t = this.traps[i];
       t.age += dt;
       const def = this.other(t.owner);
@@ -532,51 +562,49 @@ export class Match {
 
   update(dt) {
     if (this.intro > 0) {
-      this.intro -= dt;
-      this.p1.sync();
-      this.p2.sync();
-      this.p1.ninja.update(dt, {});
-      this.p2.ninja.update(dt, {});
+      this.intro = Math.max(0, this.intro - dt);
+      this.p1.sync(); this.p2.sync();
+      this.p1.ninja.update(dt, {}); this.p2.ninja.update(dt, {});
       return;
     }
-    if (this.hitstop > 0) {
-      this.hitstop -= dt;
+    if (this.hitstop > 0) { this.hitstop = Math.max(0, this.hitstop - dt); return; }
+    if (this.over && !this.interlude) {
+      this.p1.ninja.update(dt, {}); this.p2.ninja.update(dt, {});
       return;
     }
+    this.comboTimer -= dt;
+    if (this.comboTimer <= 0) { this.combo = 0; this.comboOwner = null; }
     if (this.interlude) {
-      // Pausa entre olas: el jugador puede moverse y recoger objetos.
-      this.comboTimer -= dt;
-      if (this.comboTimer <= 0) this.combo = 0;
-      this.physics(this.p1, dt);
-      this.physics(this.p2, dt);
-      this.stepProjectiles(dt);
+      this.projectiles.length = 0; this.traps.length = 0;
+      this.physics(this.p1, dt); this.physics(this.p2, dt);
       this.stepPickups(dt);
       return;
     }
-    if (!this.over) this.time -= dt;
-    if (this.time <= 0 && !this.over) {
-      this.time = 0;
+    this.time = Math.max(0, this.time - dt);
+    if (this.time <= 0) {
       this.over = true;
-      this.winner = this.p1.hp >= this.p2.hp ? this.p1 : this.p2;
+      this.winner = this.p1.hp / this.p1.maxHp >= this.p2.hp / this.p2.maxHp ? this.p1 : this.p2;
+      this.winner.ninja.animator.play("win", 3, true);
       this.onEvent({ type: "timeout", winner: this.winner });
+      return;
     }
-    this.comboTimer -= dt;
-    if (this.comboTimer <= 0) this.combo = 0;
     this.face();
     this.physics(this.p1, dt);
-    this.physics(this.p2, dt);
-    this.stepProjectiles(dt);
+    if (!this.over) this.physics(this.p2, dt);
+    if (!this.over) this.stepProjectiles(dt);
     this.stepPickups(dt);
-    const gap = Math.abs(this.p1.x - this.p2.x);
-    if (gap < 0.55 && this.p1.y < 0.3 && this.p2.y < 0.3) {
-      const push = (0.55 - gap) / 2;
-      if (this.p1.x < this.p2.x) {
-        this.p1.x -= push;
-        this.p2.x += push;
-      } else {
-        this.p1.x += push;
-        this.p2.x -= push;
+    const left = this.p1.x <= this.p2.x ? this.p1 : this.p2;
+    const right = this.other(left);
+    const gap = right.x - left.x;
+    if (gap < 0.6 && left.y < 0.3 && right.y < 0.3 && !this.over) {
+      const push = (0.6 - gap) / 2;
+      left.x = Math.max(ARENA.minX, left.x - push);
+      right.x = Math.min(ARENA.maxX, right.x + push);
+      if (right.x - left.x < 0.6) {
+        if (left.x === ARENA.minX) right.x = left.x + 0.6;
+        else left.x = right.x - 0.6;
       }
     }
+    this.p1.sync(); this.p2.sync();
   }
 }

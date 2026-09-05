@@ -1,14 +1,17 @@
 import * as THREE from "three";
 import {
-  DEFAULT_APPEARANCE, DEFAULT_SETTINGS, DEFAULT_BINDS, LEVELS, PRESETS, ELEMENT_IDS, ELEMENTS, STATUS, buildWaves,
+  DEFAULT_APPEARANCE, DEFAULT_SETTINGS, DEFAULT_BINDS, LEVELS, PRESETS, ELEMENT_IDS, ELEMENTS, STATUS, DIFFICULTY, MOVES, buildWaves,
 } from "./config.js";
-import { loadSave, writeSave, defaultSave } from "./storage.js";
+import { loadSave, writeSave, normalizeSave } from "./storage.js";
 import { AudioEngine } from "./audio.js";
 import { Input } from "./input.js";
 import { Renderer } from "./renderer.js";
 import { Stage } from "./stage.js";
 import { FX } from "./fx.js";
 import { createNinja, disposeNinja } from "./ninja.js";
+import { createNaruto } from "./naruto.js";
+import { loadAssets } from "./assets.js";
+import { disposeTree } from "./resources.js";
 import { Fighter, Match } from "./combat.js";
 import { AIController } from "./ai.js";
 import * as UI from "./ui.js";
@@ -28,20 +31,18 @@ export class Game {
     this.fx = null;
     this.mode = "boot";
     this.paused = false;
-    this.save = loadSave() || defaultSave(structuredClone(DEFAULT_APPEARANCE), { ...DEFAULT_SETTINGS }, { ...DEFAULT_BINDS });
-    this.save.appearance = merge(DEFAULT_APPEARANCE, this.save.appearance || {});
-    this.save.settings = { ...DEFAULT_SETTINGS, ...this.save.settings };
-    this.save.binds = { ...DEFAULT_BINDS, ...this.save.binds };
+    this.save = normalizeSave(loadSave(), { ...DEFAULT_SETTINGS, quality: this.isMobile() ? "baja" : "alta" });
+    this.stage.setQuality(this.save.settings.quality);
     this.input.setBinds(this.save.binds);
+    this.save.binds = { ...this.input.binds };
     this.audio.set(this.save.settings);
     this.playerNinja = null;
     this.enemyNinja = null;
     this.match = null;
     this.ai = null;
     this.level = LEVELS[0];
-    this.projMeshes = [];
-    this.trapMeshes = [];
-    this.pickupMeshes = [];
+    this.projMeshes = new Map();
+    this.pickupMeshes = new Map();
     this.waves = [];
     this.waveIndex = 0;
     this.versusMode = false;
@@ -53,16 +54,22 @@ export class Game {
     this.draft = structuredClone(this.save.appearance);
     this.clock = new THREE.Clock();
     this.t = 0;
-    this.showcase = new THREE.Group();
-    this.renderer.scene.add(this.showcase);
+    this.accumulator = 0;
+    this.hudClock = 0;
+    this.levelRequest = 0;
+    this.editorPreviewRemaining = 0;
+    this.updateControlPreferences();
   }
 
   isMobile() {
-    return window.innerWidth <= 900;
+    return window.matchMedia("(any-pointer: coarse)").matches || navigator.maxTouchPoints > 0;
   }
 
   persist() {
-    writeSave(this.save);
+    if (!writeSave(this.save) && !this.saveWarning) {
+      UI.toast("El navegador no permite guardar. Puedes seguir jugando esta sesión.");
+      this.saveWarning = true;
+    }
   }
 
   async start() {
@@ -70,11 +77,10 @@ export class Game {
     const fill = document.getElementById("boot-fill");
     const tick = (p) => { if (fill) fill.style.width = p + "%"; };
     tick(12);
-    await this.stage.loadTextures();
-    tick(40);
-    this.renderer.setQuality(this.save.settings.quality);
-    await this.renderer.enableBloom();
-    tick(70);
+    await loadAssets((progress) => tick(12 + progress * 68));
+    await document.fonts.load('500 32px "Noto Sans JP"', "葉砂霧雲石雨音忍").catch(() => {});
+    await this.renderer.setQuality(this.save.settings.quality);
+    tick(85);
     await this.buildMenuWorld();
     tick(100);
     this.bindUI();
@@ -93,7 +99,7 @@ export class Game {
       this.playerNinja.root.parent?.remove(this.playerNinja.root);
       disposeNinja(this.playerNinja);
     }
-    this.playerNinja = createNinja(app);
+    this.playerNinja = app.model === "custom" ? createNinja(app) : createNaruto(app);
     this.renderer.scene.add(this.playerNinja.root);
   }
 
@@ -108,6 +114,8 @@ export class Game {
       const tog = e.target.closest("[data-toggle]");
       const elc = e.target.closest("[data-el]");
       const kbd = e.target.closest("[data-bind]");
+      const preview = e.target.closest("[data-preview]")?.dataset.preview;
+      if (preview) this.previewMove(preview);
       if (go) this.goto(go);
       if (act) this.action(act);
       if (level) this.startLevel(Number(level));
@@ -140,7 +148,12 @@ export class Game {
         const v = e.target.type === "checkbox" ? e.target.checked : e.target.type === "range" ? Number(e.target.value) : e.target.value;
         this.save.settings[set] = v;
         this.audio.set(this.save.settings);
-        if (set === "quality") this.renderer.setQuality(v);
+        if (set === "quality") {
+          this.renderer.setQuality(v);
+          this.stage.setQuality(v);
+          this.stage.build(this.stage.definition || LEVELS[0].stage);
+        }
+        if (set === "touchControls" || set === "touchScale") this.updateControlPreferences();
         this.persist();
       }
       if (e.target.dataset.name !== undefined) {
@@ -177,6 +190,61 @@ export class Game {
     window.addEventListener("pointercancel", () => {
       this.editorDrag = null;
     });
+    window.addEventListener("keydown", (event) => {
+      if (this.paused && event.code === "Tab") {
+        const buttons = [...document.querySelectorAll(".pause-menu button")];
+        const index = buttons.indexOf(document.activeElement);
+        if (buttons.length) {
+          event.preventDefault();
+          buttons[(index + (event.shiftKey ? -1 : 1) + buttons.length) % buttons.length].focus();
+        }
+      }
+      this.audio.unlock();
+      if (!this.audio.music.playing) this.audio.startMusic(this.match ? "fight" : "menu");
+    });
+    window.addEventListener("blur", () => this.setPaused(true));
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) { this.setPaused(true); this.audio.suspend(); }
+    });
+    window.addEventListener("resize", () => { this.input.reset(); this.setPaused(true); });
+    window.matchMedia("(any-pointer: coarse)").addEventListener("change", () => this.updateControlPreferences());
+    this.canvas.addEventListener("webglcontextlost", (event) => {
+      event.preventDefault();
+      this.setPaused(true);
+      UI.toast("Se ha interrumpido el renderizado. Espera a que se recupere o recarga la página.");
+    });
+  }
+
+  updateControlPreferences() {
+    const { touchControls, touchScale } = this.save.settings;
+    this.touchEnabled = touchControls === "on" || (touchControls === "auto" && this.isMobile());
+    document.documentElement.dataset.touch = String(this.touchEnabled);
+    document.documentElement.style.setProperty("--touch-scale", touchScale);
+    this.renderer.touch = this.touchEnabled;
+    if (!this.touchEnabled) this.input.reset();
+  }
+
+  setPaused(value) {
+    if (!["fight", "interlude"].includes(this.mode) || this.paused === value) return;
+    this.paused = value;
+    this.accumulator = 0;
+    this.input.setEnabled(!value);
+    this.input.reset();
+    document.documentElement.dataset.paused = String(value);
+    const slot = document.getElementById("pause-slot");
+    if (slot) {
+      slot.innerHTML = "";
+      if (value) { slot.appendChild(UI.pauseMenu()); slot.querySelector("button")?.focus(); }
+      else this.canvas.focus({ preventScroll: true });
+    }
+    if (!value) this.audio.unlock();
+  }
+
+  previewMove(name) {
+    if (this.mode !== "editor" || !MOVES[name]) return;
+    const move = MOVES[name];
+    this.editorPreviewRemaining = move.startup + move.active + move.recovery + 0.3;
+    this.playerNinja.animator.play(name, this.editorPreviewRemaining, true);
   }
 
   action(act) {
@@ -185,6 +253,7 @@ export class Game {
         UI.toast("Elige dos elementos");
         return;
       }
+      this.draft.name = this.draft.name.trim() || (this.draft.model === "custom" ? "Shinobi" : "Naruto");
       this.save.appearance = structuredClone(this.draft);
       this.persist();
       this.rebuildPlayer(this.save.appearance);
@@ -192,7 +261,7 @@ export class Game {
     }
     if (act === "randomChar") {
       const p = PRESETS[Math.floor(Math.random() * PRESETS.length)];
-      this.draft = merge(DEFAULT_APPEARANCE, p.appearance);
+      if (this.draft.model === "custom") this.draft = { ...merge(DEFAULT_APPEARANCE, p.appearance), model: "custom" };
       const e1 = ELEMENT_IDS[Math.floor(Math.random() * ELEMENT_IDS.length)];
       let e2 = ELEMENT_IDS[Math.floor(Math.random() * ELEMENT_IDS.length)];
       if (e2 === e1) e2 = ELEMENT_IDS[(ELEMENT_IDS.indexOf(e1) + 1) % ELEMENT_IDS.length];
@@ -205,10 +274,12 @@ export class Game {
       this.persist();
       this.goto("settings");
     }
-    if (act === "resume") {
-      this.paused = false;
-      const slot = document.getElementById("pause-slot");
-      if (slot) slot.innerHTML = "";
+    if (act === "resume") this.setPaused(false);
+    if (act === "pause") this.setPaused(!this.paused);
+    if (act === "fullscreen") {
+      const request = document.fullscreenElement ? document.exitFullscreen?.() : document.documentElement.requestFullscreen?.();
+      if (request) request.catch(() => UI.toast("Pantalla completa no disponible en este navegador."));
+      else UI.toast("Puedes usar la opción de pantalla completa de tu navegador.");
     }
     if (act === "restart") this.startLevel(this.level.id, this.versusMode);
     if (act === "next") this.startLevel(Math.min(30, this.level.id + 1));
@@ -229,7 +300,8 @@ export class Game {
   applyPreset(id) {
     const p = PRESETS.find((x) => x.id === id);
     if (!p) return;
-    this.draft = merge(DEFAULT_APPEARANCE, p.appearance);
+    this.draft = { ...merge(DEFAULT_APPEARANCE, p.appearance), model: id === "uzumaki" ? "naruto" : "custom" };
+    if (id === "uzumaki") this.draft.name = "Naruto";
     this.refreshEditor();
     this.audio.sfx("ui");
   }
@@ -242,6 +314,12 @@ export class Game {
   }
 
   refreshEditor(rebuildFields = true) {
+    if (this.renderedEditorModel !== this.draft.model) {
+      UI.mount(this.ui, UI.editorScreen(this.draft));
+      this.renderedEditorModel = this.draft.model;
+      this.editorTab = "identidad";
+    }
+    this.editorPreviewRemaining = 0;
     this.rebuildPlayer(this.draft);
     this.playerNinja.root.position.set(0, 0, 0);
     this.playerNinja.root.rotation.y = this.editorRotY;
@@ -249,20 +327,29 @@ export class Game {
   }
 
   goto(screen) {
+    ++this.levelRequest;
+    this.input.cancelRemap(false);
+    this.input.unbindTouch();
+    this.input.setEnabled(false);
     this.paused = false;
+    this.accumulator = 0;
     this.mode = screen;
+    document.documentElement.dataset.mode = screen;
+    document.documentElement.dataset.paused = "false";
     this.clearFight();
     if (screen !== "fight") {
       if (this.audio.ctx) this.audio.startMusic("menu");
     }
     if (screen === "menu") {
-      UI.mount(this.ui, UI.menuScreen(this.save));
+      UI.mount(this.ui, UI.menuScreen(this.save, this.input));
       this.rebuildPlayer(this.save.appearance);
     } else if (screen === "settings") {
       UI.mount(this.ui, UI.settingsScreen(this.save.settings, this.save.binds, this.input));
     } else if (screen === "editor") {
       this.draft = structuredClone(this.save.appearance);
       this.editorRotY = 0;
+      this.editorPreviewRemaining = 0;
+      this.renderedEditorModel = this.draft.model;
       UI.mount(this.ui, UI.editorScreen(this.draft));
       this.setEditorTab("identidad");
       this.rebuildPlayer(this.draft);
@@ -278,37 +365,40 @@ export class Game {
     this.audio.sfx("ui");
   }
 
+  clearVisuals() {
+    this.projMeshes.forEach((mesh) => disposeTree(mesh));
+    this.pickupMeshes.forEach((mesh) => disposeTree(mesh));
+    this.projMeshes.clear();
+    this.pickupMeshes.clear();
+  }
+
   clearFight() {
     this.match = null;
     this.ai = null;
     this.p1Fighter = null;
-    this.projMeshes.forEach((m) => m.parent?.remove(m));
-    this.projMeshes = [];
-    this.pickupMeshes.forEach((m) => m.parent?.remove(m));
-    this.pickupMeshes = [];
-    if (this.enemyNinja) {
-      this.enemyNinja.root.parent?.remove(this.enemyNinja.root);
-      disposeNinja(this.enemyNinja);
-      this.enemyNinja = null;
-    }
+    this.clearEnemy();
+    this.fx?.clear();
+    this.fx = null;
   }
 
   clearEnemy() {
-    if (this.enemyNinja) {
-      this.enemyNinja.root.parent?.remove(this.enemyNinja.root);
-      disposeNinja(this.enemyNinja);
-      this.enemyNinja = null;
-    }
-    this.projMeshes.forEach((m) => m.parent?.remove(m));
-    this.projMeshes = [];
-    this.pickupMeshes.forEach((m) => m.parent?.remove(m));
-    this.pickupMeshes = [];
+    if (this.enemyNinja) { disposeNinja(this.enemyNinja); this.enemyNinja = null; }
+    this.clearVisuals();
+    this.fx?.clear();
   }
 
   async startLevel(id, versus = false) {
-    this.level = LEVELS[id - 1];
-    if (!this.level) return;
-    if (!versus && id > this.save.unlocked) return;
+    const level = LEVELS[id - 1];
+    if (!level || (!versus && id > this.save.unlocked)) return;
+    const request = ++this.levelRequest;
+    this.clearFight();
+    this.input.unbindTouch();
+    this.input.setEnabled(false);
+    this.paused = false;
+    this.accumulator = 0;
+    document.documentElement.dataset.paused = "false";
+    document.documentElement.dataset.mode = "intro";
+    this.level = level;
     this.versusMode = versus;
     this.waves = buildWaves(this.level, versus);
     this.waveIndex = 0;
@@ -320,13 +410,14 @@ export class Game {
       playerElems: this.save.appearance.elements.map((e) => ELEMENTS[e].name),
       waveCount: this.waves.length,
       versus,
+      playerModel: this.save.appearance.model,
     });
     UI.mount(this.ui, intro);
     this.stage.build(this.level.stage);
-    this.fx = new FX(this.stage.fx);
+    this.fx = new FX(this.stage.fx, this.stage.q.particles);
     this.rebuildPlayer(this.save.appearance);
-    await new Promise((r) => setTimeout(r, 1800));
-    if (this.mode !== "intro") return;
+    await new Promise((r) => setTimeout(r, 1200));
+    if (this.mode !== "intro" || request !== this.levelRequest) return;
     this.beginWave(0);
   }
 
@@ -335,6 +426,10 @@ export class Game {
     const wave = this.waves[i];
     if (!wave) return;
     this.mode = "fight";
+    document.documentElement.dataset.mode = "fight";
+    this.input.reset();
+    this.input.setEnabled(true);
+    this.accumulator = 0;
     this.interludeTimer = 0;
     this.clearEnemy();
     this.enemyNinja = createNinja(wave.appearance);
@@ -347,16 +442,16 @@ export class Game {
     p1.x = -3.2; p1.y = 0; p1.z = 0; p1.vx = 0; p1.vy = 0; p1.facing = 1;
     p1.state = "idle"; p1.timer = 0; p1.animLock = 0; p1.hitstun = 0; p1.blockstun = 0;
     p1.invuln = 0; p1.freeze = 0; p1.flash = 0; p1.coyote = 0; p1.jumpBuffer = 0; p1.walkDir = 0;
-    p1.cd = { special1: 0, special2: 0, ultimate: 0 };
+    p1.cd = { special1: 0, special2: 0, ultimate: 0, dash: 0 };
+    p1.dashTime = 0; p1.bufferedAction = null; p1.upHold = false;
     p1.statuses = [];
     p1.move = null; p1.attackHit = false; p1.alive = true; p1.crouch = false; p1.blocking = false;
     p1.pendingSpec = null;
-    p1.ninja.animator.state = "idle";
-    p1.ninja.animator.t = 0;
-    p1.ninja.animator.lock = 0;
+    p1.ninja.animator.reset();
     p1.sync();
 
-    const p2 = new Fighter(this.enemyNinja, 2, { hp: wave.hp, damage: wave.damage, speed: wave.speed });
+    const difficulty = DIFFICULTY[this.save.settings.difficulty];
+    const p2 = new Fighter(this.enemyNinja, 2, { hp: wave.hp * difficulty.hp, damage: wave.damage * difficulty.dmg, speed: wave.speed });
     this.match = new Match(p1, p2, {
       time: 99,
       onEvent: (ev) => this.onCombatEvent(ev),
@@ -365,10 +460,10 @@ export class Game {
     p2.sync();
     const diff = this.save.settings.difficulty;
     this.ai = new AIController(p2, this.match, diff, wave.ai);
-    UI.mount(this.ui, UI.hud(p1, p2, { ...this.level, wave, waveIndex: i, waveCount: this.waves.length, versus: this.versusMode }));
+    UI.mount(this.ui, UI.hud(p1, p2, { ...this.level, wave, waveIndex: i, waveCount: this.waves.length, versus: this.versusMode }, this.input));
     const help = document.getElementById("help");
     if (help && !this.save.settings.showHints) help.style.display = "none";
-    const touch = UI.touchLayer();
+    const touch = UI.touchLayer(p1);
     this.ui.appendChild(touch);
     this.input.bindTouch(touch);
     const p1el = document.getElementById("p1-el");
@@ -377,6 +472,7 @@ export class Game {
     if (p2el) p2el.textContent = p2.elements.map((e) => ELEMENTS[e].kana).join(" ");
     this.announce(this.waves.length > 1 ? `OLEADA ${i + 1}` : "FIGHT");
     this.syncPickups();
+    this.updateHud();
   }
 
   announce(text) {
@@ -403,7 +499,9 @@ export class Game {
   }
 
   onCombatEvent(ev) {
-    if (ev.type === "hit") {
+    if (ev.type === "attack") {
+      this.audio.sfx(["kick", "airKick", "crouchLight"].includes(ev.move) ? "kick" : "punch");
+    } else if (ev.type === "hit") {
       this.audio.sfx("hit");
       this.fx?.burst(ev.x, ev.y, 0, "#ffe08a", 14, 5);
       this.renderer.shake = this.match.shake;
@@ -478,6 +576,11 @@ export class Game {
   }
 
   showResult(win) {
+    this.input.setEnabled(false);
+    document.documentElement.dataset.mode = "result";
+    this.match.projectiles.length = 0;
+    this.match.traps.length = 0;
+    this.clearVisuals();
     const slot = document.getElementById("result-slot");
     if (!slot) return;
     slot.innerHTML = "";
@@ -485,7 +588,7 @@ export class Game {
   }
 
   playerInput() {
-    const dashTap = this.input.dashTap(0.016);
+    const dashTap = this.input.dashTap();
     return {
       axis: this.input.axis(),
       jump: this.input.wasPressed("up"),
@@ -500,6 +603,7 @@ export class Game {
       ultimate: this.input.wasPressed("ultimate"),
       block: this.input.isDown("block"),
       dash: this.input.wasPressed("dash") || dashTap !== 0,
+      dashDirection: dashTap,
     };
   }
 
@@ -513,6 +617,7 @@ export class Game {
       const b = n.querySelector("b");
       if (i) i.style.width = Math.max(0, ratio * 100) + "%";
       if (b) b.style.width = Math.max(0, ratio * 100) + "%";
+      n.setAttribute("aria-valuenow", String(Math.round(Math.max(0, Math.min(1, ratio)) * 100)));
     };
     setBar("p1-hp", p1.hp / p1.maxHp);
     setBar("p2-hp", p2.hp / p2.maxHp);
@@ -524,13 +629,18 @@ export class Game {
     if (c) {
       if (this.match.combo > 1) {
         c.classList.add("show");
-        c.innerHTML = `${this.match.combo} <small>${this.match.comboRank}</small>`;
+        const html = `${this.match.combo} <small>${this.match.comboRank}</small>`;
+        if (c.innerHTML !== html) c.innerHTML = html;
       } else c.classList.remove("show");
     }
     const w = document.getElementById("wave-info");
     if (w && this.waves.length > 1) w.textContent = `Oleada ${this.waveIndex + 1}/${this.waves.length}`;
     this.renderStatus("p1", p1);
     this.renderStatus("p2", p2);
+    for (const [action, cost, cooldown] of [["special1", p1.el1.special.chakra, p1.cd.special1], ["special2", p1.el2.special.chakra, p1.cd.special2], ["ultimate", 100, p1.cd.ultimate]]) {
+      const button = this.ui.querySelector(`[data-input="${action}"]`);
+      button?.classList.toggle("unavailable", p1.chakra < cost || cooldown > 0);
+    }
   }
 
   renderStatus(prefix, f) {
@@ -545,113 +655,101 @@ export class Game {
     if (f.buffs.shield > 0) parts.push(`<span class="st buff" style="--stc:#c9f6ff">ESCUDO</span>`);
     if (f.buffs.damage > 0) parts.push(`<span class="st buff" style="--stc:#ff6a2a">PODER</span>`);
     if (f.buffs.speed > 0) parts.push(`<span class="st buff" style="--stc:#e8c36a">VELOCIDAD</span>`);
-    box.innerHTML = parts.join("");
+    const html = parts.join("");
+    if (box.innerHTML !== html) box.innerHTML = html;
   }
 
   syncProjectiles() {
     if (!this.match || !this.fx) return;
-    while (this.projMeshes.length < this.match.projectiles.length) {
-      const p = this.match.projectiles[this.projMeshes.length];
-      this.projMeshes.push(this.fx.projectileMesh(p.color, p.size));
-    }
-    while (this.projMeshes.length > this.match.projectiles.length) {
-      const m = this.projMeshes.pop();
-      m.parent?.remove(m);
-    }
-    this.match.projectiles.forEach((p, i) => {
-      const m = this.projMeshes[i];
-      m.position.set(p.x, p.y, 0);
-      m.rotation.y = p.vx > 0 ? -Math.PI / 2 : Math.PI / 2;
+    const projectiles = new Set(this.match.projectiles);
+    this.projMeshes.forEach((mesh, projectile) => {
+      if (!projectiles.has(projectile)) { disposeTree(mesh); this.projMeshes.delete(projectile); }
     });
-    this.match.traps.forEach((t) => {
-      if (!t.mesh) {
-        t.mesh = true;
-        this.fx.shock(t.x, 0.1, t.color || "#c48a4a");
-      }
+    for (const projectile of projectiles) {
+      if (!this.projMeshes.has(projectile)) this.projMeshes.set(projectile, this.fx.projectileMesh(projectile.color, projectile.size));
+      const mesh = this.projMeshes.get(projectile);
+      mesh.position.set(projectile.x, projectile.y, 0);
+      mesh.rotation.y = projectile.vx > 0 ? -Math.PI / 2 : Math.PI / 2;
+    }
+    this.match.traps.forEach((trap) => {
+      if (!trap.mesh) { trap.mesh = true; this.fx.shock(trap.x, 0.1, trap.color || "#c48a4a"); }
     });
   }
 
   syncPickups() {
-    if (!this.match || !this.fx) {
-      this.pickupMeshes.forEach((m) => m.parent?.remove(m));
-      this.pickupMeshes = [];
-      return;
-    }
-    const keys = this.match.pickups;
-    while (this.pickupMeshes.length < keys.length) {
-      const p = keys[this.pickupMeshes.length];
-      this.pickupMeshes.push(this.fx.pickupMesh(p.id, p.color));
-    }
-    while (this.pickupMeshes.length > keys.length) {
-      const m = this.pickupMeshes.pop();
-      m.parent?.remove(m);
-    }
-    keys.forEach((p, i) => {
-      const m = this.pickupMeshes[i];
-      m.position.set(p.x, p.y + Math.sin(p.bob * 3) * 0.12, 0);
-      m.rotation.y += 0.03;
+    if (!this.match || !this.fx) return;
+    const pickups = new Set(this.match.pickups);
+    this.pickupMeshes.forEach((mesh, pickup) => {
+      if (!pickups.has(pickup)) { disposeTree(mesh); this.pickupMeshes.delete(pickup); }
     });
+    for (const pickup of pickups) {
+      if (!this.pickupMeshes.has(pickup)) this.pickupMeshes.set(pickup, this.fx.pickupMesh(pickup.id, pickup.color));
+      const mesh = this.pickupMeshes.get(pickup);
+      mesh.position.set(pickup.x, pickup.y + Math.sin(pickup.bob * 3) * 0.12, 0);
+      mesh.rotation.y = pickup.bob * 2;
+    }
   }
 
   loop = () => {
     requestAnimationFrame(this.loop);
-    const dt = Math.min(0.033, this.clock.getDelta());
-    this.t += dt;
-    this.stage.update(dt);
-    this.fx?.update(dt);
-
-    if (this.mode === "menu" || this.mode === "credits" || this.mode === "campaign") {
+    const rawDt = this.clock.getDelta();
+    const dt = Math.min(0.1, rawDt);
+    const live = this.mode === "fight" || this.mode === "interlude";
+    if (live && this.input.wasPressed("pause")) this.setPaused(!this.paused);
+    if (!this.paused) {
+      this.t += dt;
+      this.stage.update(dt);
+      this.fx?.update(dt);
+    }
+    if (["menu", "credits", "campaign", "settings"].includes(this.mode)) {
       this.renderer.showcaseCam(this.t);
       if (this.playerNinja) {
-        this.playerNinja.root.position.set(Math.sin(this.t * 0.2) * 0.2, 0, 0);
+        this.playerNinja.root.position.set(0, 0, 0);
+        this.playerNinja.root.rotation.y = -0.24;
         this.playerNinja.update(dt, {});
       }
-    } else if (this.mode === "settings") {
-      this.renderer.showcaseCam(this.t * 0.5);
-      this.playerNinja?.update(dt, {});
     } else if (this.mode === "editor") {
       this.renderer.editorCam();
       if (this.playerNinja) {
-        if (!this.editorDrag) this.editorRotY += dt * 0.35;
+        if (!this.editorDrag && this.editorPreviewRemaining <= 0) this.editorRotY += dt * 0.22;
         this.playerNinja.root.rotation.y = this.editorRotY;
+        if (this.editorPreviewRemaining > 0) {
+          this.editorPreviewRemaining -= dt;
+          if (this.editorPreviewRemaining <= 0) this.playerNinja.animator.play("idle");
+        }
         this.playerNinja.update(dt, {});
       }
     } else if (this.mode === "intro") {
-      this.renderer.follow(-3, 3, dt);
-    } else if (this.mode === "fight" || this.mode === "interlude" || this.mode === "result") {
-      if (this.mode === "fight" && this.match) {
-        if (this.paused) {
-          if (this.input.wasPressed("pause")) this.action("resume");
-        } else if (this.input.wasPressed("pause")) {
-          this.paused = true;
-          const slot = document.getElementById("pause-slot");
-          if (slot) {
-            slot.innerHTML = "";
-            slot.appendChild(UI.pauseMenu());
+      this.renderer.follow(-3.2, 3.2, dt);
+    } else if (this.match) {
+      if (live && !this.paused) {
+        this.renderer.trackFrame(rawDt);
+        this.accumulator = Math.min(0.1, this.accumulator + dt);
+        const step = 1 / 60;
+        while (this.accumulator + 1e-8 >= step && this.match) {
+          this.accumulator -= step;
+          this.match.control(this.match.p1, this.playerInput(), step);
+          if (this.mode === "fight") this.match.control(this.match.p2, this.ai.input(step), step);
+          this.match.update(step);
+          this.input.endFrame();
+          if (this.mode === "result") break;
+          if (this.mode === "interlude") {
+            this.interludeTimer -= step;
+            if (this.interludeTimer <= 0) { this.beginWave(this.waveIndex + 1); break; }
           }
-        } else {
-          this.match.control(this.match.p1, this.playerInput(), dt);
-          this.match.control(this.match.p2, this.ai.input(dt), dt);
-          this.match.update(dt);
-          this.syncProjectiles();
-          this.syncPickups();
-          this.updateHud();
         }
-      } else if (this.mode === "interlude" && this.match) {
-        this.match.control(this.match.p1, this.playerInput(), dt);
-        this.match.update(dt);
         this.syncProjectiles();
         this.syncPickups();
+        this.hudClock += dt;
+        if (this.hudClock >= 0.08) { this.updateHud(); this.hudClock = 0; }
+      } else if (this.mode === "result") {
+        this.match.update(dt);
         this.updateHud();
-        this.interludeTimer -= dt;
-        if (this.interludeTimer <= 0) {
-          this.beginWave(this.waveIndex + 1);
-        }
       }
-      if (this.match) this.renderer.follow(this.match.p1.x, this.match.p2.x, dt);
+      this.renderer.follow(this.match.p1.x, this.match.p2.x, this.paused ? 0 : dt, this.match.p1.y, this.match.p2.y);
     }
-
     this.renderer.render();
-    this.input.endFrame();
+    // At 120/144 Hz, preserve edge inputs until an actual 60 Hz simulation step.
+    if (!live || this.paused) this.input.endFrame();
   };
 }

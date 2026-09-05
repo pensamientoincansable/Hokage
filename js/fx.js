@@ -1,16 +1,19 @@
 import * as THREE from "three";
+import { disposeTree } from "./resources.js";
 
 export class FX {
-  constructor(parent) {
+  constructor(parent, particleScale = 1) {
     this.parent = parent;
     this.items = [];
+    this.particleScale = particleScale;
   }
 
   burst(x, y, z, color = "#ffe08a", n = 18, speed = 4) {
+    n = Math.max(0, Math.min(Math.ceil(n * this.particleScale), 80 - this.items.length));
     for (let i = 0; i < n; i++) {
       const m = new THREE.Mesh(
         new THREE.SphereGeometry(0.04 + Math.random() * 0.05, 6, 6),
-        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 })
+        new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false, opacity: 1 })
       );
       m.position.set(x, y, z);
       const v = new THREE.Vector3((Math.random() - 0.5) * speed, Math.random() * speed, (Math.random() - 0.5) * speed * 0.3);
@@ -28,11 +31,11 @@ export class FX {
     core.scale.set(1.6, 1, 1);
     const ring = new THREE.Mesh(
       new THREE.TorusGeometry(size * 1.3, 0.04, 8, 16),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.7 })
+      new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false, opacity: 0.7 })
     );
     const glow = new THREE.Mesh(
       new THREE.SphereGeometry(size * 2, 8, 8),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.18 })
+      new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false, opacity: 0.18 })
     );
     g.add(core, ring, glow);
     this.parent.add(g);
@@ -47,11 +50,11 @@ export class FX {
     );
     const ring = new THREE.Mesh(
       new THREE.TorusGeometry(0.26, 0.03, 8, 20),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8 })
+      new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false, opacity: 0.8 })
     );
     const glow = new THREE.Mesh(
       new THREE.SphereGeometry(0.34, 8, 8),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.14 })
+      new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false, opacity: 0.14 })
     );
     g.add(core, ring, glow);
     g.userData.pickup = id;
@@ -62,7 +65,7 @@ export class FX {
   shockwave(x, y, color = "#3ee0ff") {
     const ring = new THREE.Mesh(
       new THREE.TorusGeometry(0.4, 0.05, 8, 28),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9 })
+      new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false, opacity: 0.9 })
     );
     ring.position.set(x, y, 0.2);
     ring.rotation.x = Math.PI / 2;
@@ -73,7 +76,7 @@ export class FX {
   shock(x, y, color) {
     const ring = new THREE.Mesh(
       new THREE.TorusGeometry(0.2, 0.04, 8, 20),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9 })
+      new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false, opacity: 0.9 })
     );
     ring.position.set(x, y, 0.2);
     ring.rotation.x = Math.PI / 2;
@@ -89,15 +92,14 @@ export class FX {
       if (it.m.material) it.m.material.opacity = Math.max(0, it.life * 3);
       if (it.scale) it.m.scale.addScalar(dt * it.scale);
       if (it.life <= 0) {
-        this.parent.remove(it.m);
-        it.m.geometry?.dispose();
+        disposeTree(it.m);
         this.items.splice(i, 1);
       }
     }
   }
 
   clear() {
-    this.items.forEach((it) => this.parent.remove(it.m));
+    this.items.forEach((it) => disposeTree(it.m));
     this.items.length = 0;
   }
 }
