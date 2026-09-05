@@ -4,7 +4,7 @@ import { QUALITY } from "./config.js";
 import { getAssets } from "./assets.js";
 import { disposeTree } from "./resources.js";
 
-const BUILDINGS = ["tower-ring", "tower-needle", "tower-block", "tower-spire", "hangar"];
+const TOWERS = ["tower-ring", "tower-needle", "tower-block", "tower-spire"];
 const rand = (n) => { const v = Math.sin(n * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); };
 
 export class Stage {
@@ -59,14 +59,17 @@ export class Stage {
     }
     this.ring(1.1, 0.018, 0, 0.025, 0, this.accent, 0.28);
 
-    // All skyline silhouettes come from the supplied Niko kit, not box proxies.
+    // Towers only in the skyline. Hangars and gateways are door-shaped; using
+    // them as distant buildings made thin "floating doors" in the fog.
     const seed = ["street", "rooftop", "alley", "station", "bridge", "plaza"].indexOf(id) * 97 + 11;
+    const groundY = roof ? -7 : water ? -4.2 : -0.4;
     for (let i = 0; i < this.q.buildings; i++) {
       const back = i % 2 === 0;
       const column = Math.floor(i / 2);
-      const x = (column - (Math.ceil(this.q.buildings / 2) - 1) / 2) * 8.5 + (back ? 4.2 : 0);
-      const height = back ? 14 + rand(seed + i) * 12 : 8 + rand(seed + i) * 9;
-      this.place(BUILDINGS[(i + seed) % BUILDINGS.length], x, roof ? -7 : -0.4, back ? -36 - rand(i) * 12 : -22 - rand(i) * 7, height, rand(seed - i) * 0.6 - 0.3);
+      const x = (column - (Math.ceil(this.q.buildings / 2) - 1) / 2) * 7.4 + (back ? 3.5 : 0);
+      const height = back ? 16 + rand(seed + i) * 14 : 10 + rand(seed + i) * 8;
+      const z = back ? -42 - rand(i) * 8 : -26 - rand(i + 3) * 5;
+      this.place(TOWERS[(i + seed) % TOWERS.length], x, groundY, z, height, (rand(seed - i) - 0.5) * 0.1);
     }
 
     if (id === "street") this.street();
@@ -201,10 +204,12 @@ export class Stage {
   }
 
   street() {
-    this.place("hall", -10, 0, -9, 4.5, 0.12);
-    this.place("habitat", 14, 0, -13, 8, -0.3);
-    for (const x of [-9, -5, 5, 9]) this.place("lamp", x, 0, -3.5, 2.8, Math.PI / 2);
-    this.place("terminal", -9.6, 0, -3.5, 1.7);
+    this.place("hall", -9.8, 0, -11.2, 5.4, 0.04);
+    this.place("habitat", 10.6, 0, -12, 6.2, -0.04);
+    this.place("hall", 0.4, 0, -15.5, 4.6, 0);
+    for (const x of [-8.4, -4.2, 4.2, 8.4]) this.place("lamp", x, 0, -3.55, 2.55, Math.PI / 2);
+    this.place("terminal", -9.2, 0, -3.45, 1.4);
+    this.place("terminal", 9.2, 0, -3.45, 1.4, Math.PI);
     this.sign("KONOHA / 01", -4.8, 4.8, -7, this.secondary, 5);
     this.sign("NINJA DISTRICT", 8, 3.5, -5.5, this.accent, 4);
   }
@@ -221,22 +226,27 @@ export class Stage {
   }
 
   alley() {
-    this.place("habitat", -12, 0, -7.5, 7.5, 0.7);
-    this.place("hangar", 12, 0, -8.5, 9, -1.3);
-    this.place("gateway", -8.5, 0, -3.8, 4.2, Math.PI / 2);
-    this.place("terminal", 8.8, 0, -3.5, 1.6, -0.4);
-    this.place("generator", -9.4, 0, -3.5, 1.4);
-    this.box(22, 0.18, 0.25, 0, 6.3, -6, this.material("#142536"));
-    this.box(21, 0.035, 0.04, 0, 6.18, -5.85, this.glow(this.secondary, 2));
-    this.sign("ICHIRAKU", -7, 4, -4.6, this.secondary, 3.1);
+    const brick = this.material("#0a1018", { roughness: 0.92, metalness: 0.12 });
+    this.box(7.5, 8.5, 1.6, -12.6, 3.9, -5.2, brick);
+    this.box(7.5, 8.5, 1.6, 12.6, 3.9, -5.2, brick);
+    this.place("habitat", -11.6, 0, -8.4, 6.4, 0.06);
+    this.place("hangar", 11.8, 0, -8.8, 5.8, Math.PI + 0.05);
+    this.place("lamp", -6.2, 0, -3.35, 2.4, Math.PI / 2);
+    this.place("lamp", 6.2, 0, -3.35, 2.4, Math.PI / 2);
+    this.place("terminal", 8.5, 0, -3.45, 1.35, -0.08);
+    this.place("generator", -8.6, 0, -3.4, 1.15);
+    this.box(24, 0.18, 0.28, 0, 6.5, -5.6, this.material("#142536"));
+    this.box(23, 0.035, 0.04, 0, 6.38, -5.45, this.glow(this.secondary, 2));
+    this.sign("ICHIRAKU", -6.4, 3.6, -4.4, this.secondary, 3.1);
     this.sign("UNDERGROUND / 03", 5.6, 5.1, -6, this.accent, 4.3);
   }
 
   station() {
-    this.place("station", 0, 0, -16, 7.5, 0);
-    for (const x of [-8, 8]) {
-      this.place("canopy", x, 0, -5, 3.5);
-      this.place("terminal", x * 1.15, 0, -3.5, 1.6);
+    this.place("station", 0, 0, -18.5, 8.2, 0);
+    for (const x of [-7.4, 7.4]) {
+      this.place("canopy", x, 0, -9.2, 2.1);
+      this.place("terminal", x * 1.12, 0, -3.5, 1.45);
+      this.place("lamp", x * 0.55, 0, -3.6, 2.5, Math.PI / 2);
     }
     for (const z of [-5.8, -7.5]) this.box(90, 0.07, 0.1, 0, 0.12, z, this.glow(this.accent, 0.7));
     this.sign("TRANSIT / 04", 0, 3.7, -5.6, this.accent, 4.5);

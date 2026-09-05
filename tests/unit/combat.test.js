@@ -115,6 +115,7 @@ test("second jutsu uses its own element color", () => {
   p1.elements = ["fire", "water"]; p1.chakra = 100;
   match.special(p1, 2); match.physics(p1, 0.17);
   assert.equal(match.projectiles[0].color, ELEMENTS.water.color);
+  assert.equal(match.projectiles[0].element, "water");
 });
 
 test("collision separation never pushes a fighter outside the arena", () => {

@@ -7,6 +7,7 @@ import { MartialAnimator, martialPoses } from "../../js/martial-arts.js";
 import { MOVES } from "../../js/config.js";
 import { fightFraming } from "../../js/renderer.js";
 import { disposeTree, markShared } from "../../js/resources.js";
+import { FX } from "../../js/fx.js";
 
 function rig() {
   const root = new THREE.Group();
@@ -26,6 +27,15 @@ test("all martial attack clips share the combat startup/active/recovery timing",
     assert.ok(times.includes(move.startup), name);
     assert.ok(Math.abs(times.at(-1) - move.startup - move.active - move.recovery) < 1e-8, name);
   }
+});
+
+test("taijutsu clips use multi-pose choreography instead of two-frame pops", () => {
+  const poses = martialPoses();
+  for (const name of Object.keys(MOVES)) {
+    assert.ok(poses[name].frames.length >= 5, name);
+  }
+  assert.ok(poses.idle.frames.length >= 4);
+  assert.ok(poses.walk.frames.length >= 4);
 });
 
 test("continuous movement does not restart the clip every simulation frame", () => {
@@ -108,4 +118,27 @@ test("jump framing expands vertically as the fighter leaves the ground", () => {
   const jumping = fightFraming(1280, 800, 1, false, 3);
   assert.ok(jumping.distance > standing.distance);
   assert.ok(jumping.targetY > standing.targetY);
+});
+
+test("skyline kit uses towers, not door-shaped hangars or free-standing gateways", async () => {
+  const src = await readFile("js/stage.js", "utf8");
+  assert.equal(src.includes("place(\"gateway\""), false);
+  assert.match(src, /const TOWERS = \["tower-ring", "tower-needle", "tower-block", "tower-spire"\]/);
+  assert.match(src, /place\("hangar"/);
+});
+
+test("elemental FX spawn distinct meshes and release owned resources", () => {
+  const parent = new THREE.Group();
+  const fx = new FX(parent, 1);
+  fx.impact(0, 1, 0, "#ff4d1a", "fire");
+  fx.cast(0, 1.1, "#3aa0ff", "water");
+  fx.lightning(0, 1.2, "#c9f6ff");
+  const projectile = fx.projectileMesh("#9cffb0", 0.3, "wind");
+  fx.trapMesh(1, "#c48a4a", "earth");
+  assert.ok(parent.children.length > 3);
+  fx.update(1);
+  fx.clear();
+  disposeTree(projectile);
+  assert.equal(fx.items.length, 0);
+  assert.equal(parent.children.length, 0);
 });
