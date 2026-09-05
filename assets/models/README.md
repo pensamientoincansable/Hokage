@@ -11,7 +11,7 @@ Se conservan los **93 huesos, UV y pesos de piel**. La preparación coloca los b
 
 Se excluyen `Mesh_10` … `Mesh_19`: kunai y carcasas de contorno duplicadas. Las diez mallas visibles se agrupan por **imagen de textura**, no por UUID de material, y se exportan como cuatro mallas de piel y cuatro texturas embebidas. El GLB resultante pesa aproximadamente 256 KiB.
 
-El DAE no contiene clips. `js/martial-arts.js` crea `AnimationClip` de taijutsu para el rig: jab, directo, circular, barrido y patada aérea, además de los estados de locomoción, guardia, chakra, daño y victoria. Los tiempos se derivan de `MOVES` para que coincidan con el contacto del combate. Los rivales procedurales usan la misma coreografía con un adaptador de articulaciones.
+El DAE no contiene clips. `js/martial-arts.js` crea `AnimationClip` de taijutsu para el rig: jab, directo, circular, barrido y patada aérea, además de los estados de locomoción, guardia, chakra, daño y victoria. Cada golpe tiene cámara, extensión, contacto y recuperación; el idle mantiene la guardia con un bounce de peso. Los tiempos se derivan de `MOVES` para que coincidan con el contacto del combate. Los rivales procedurales usan la misma coreografía con un adaptador de articulaciones. No se importan clips de Mixamo: el rig de 93 huesos no comparte nombres ni ejes con un esqueleto genérico.
 
 `assets/img/naruto-portrait.png` se renderiza desde este modelo; **no es una imagen generada por IA**. `assets/img/logo-ui.webp` es una versión reducida del logo existente para evitar cargar su PNG de aproximadamente 2 MiB como icono.
 
@@ -35,7 +35,7 @@ El kit contiene 18 grupos reutilizables. El manifiesto relaciona cada nombre de 
 
 La lista completa está en `manifest.json`. Se hornean las transformaciones, se centra cada pieza en su base, se normaliza su tamaño y se fusionan los grupos de un mismo material. El FBX presenta sus materiales de superficie como blancos en Three.js; se traducen sus **nombres de material** a metal, superficies oscuras, cristales y luz emisiva. Cada escenario aplica su propia paleta sin sustituir la geometría original.
 
-`js/stage.js` instancia las piezas repetidas y añade una plataforma de lucha despejada, barandillas, cartelería y luces. Las seis distribuciones comparten el kit, pero tienen composiciones y elementos de primer plano distintos. Las luces direccionales sustituyen la antigua luz puntual por cada edificio/farola.
+`js/stage.js` instancia las piezas repetidas y añade una plataforma de lucha despejada, barandillas, cartelería y luces. El skyline instancia solo torres (`tower-*`); `hangar` y `gateway` son piezas de puerta/nave y se usan como muros o almacenes a cota de calle, nunca como silueta lejana. Las seis distribuciones comparten el kit, pero tienen composiciones y elementos de primer plano distintos. Las luces direccionales sustituyen la antigua luz puntual por cada edificio/farola.
 
 ## Reproducibilidad
 

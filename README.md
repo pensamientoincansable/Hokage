@@ -55,7 +55,7 @@ Las teclas se pueden reasignar en **Ajustes**. Esc cancela la reasignación y un
 ## Personajes y combate
 
 - Naruto es el personaje inicial, con texturas originales, **93 articulaciones** y cuatro mallas de piel. Se han retirado los kunai y las carcasas de contorno duplicadas.
-- Guardia, desplazamiento, salto, jab, directo, patada circular, barrido, patada aérea, canalización de chakra, reacción al golpe y K.O. usan animación esquelética con transiciones.
+- Guardia, desplazamiento, salto, jab, directo, patada circular, barrido, patada aérea, canalización de chakra, reacción al golpe y K.O. usan animación esquelética con transiciones. La coreografía es de kung fu compacto (cámara, empuje de cadera, contacto y follow-through), no poses de dos fotogramas.
 - Los ataques tienen preparación, contacto y recuperación sincronizados con sus ventanas de daño. Un pequeño búfer de entrada permite encadenar una pulsación al final de la recuperación; recibir daño interrumpe los ataques pendientes.
 - **Personaje y chakra → Dojo Shinobi** permite probar las cinco técnicas, cambiar alias, altura y dos naturalezas. El aspecto de Naruto se conserva. El editor anterior de rostro, ropa, cabello y accesorios sigue disponible al elegir **Shinobi personalizado**; los rivales mantienen sus diseños propios.
 - 8 naturalezas de chakra, 28 fusiones, estados alterados, combos, bloqueo, proyectiles y objetos de vitalidad / chakra / mejoras temporales.
@@ -63,7 +63,7 @@ Las teclas se pueden reasignar en **Ajustes**. Esc cancela la reasignación y un
 
 ## Escenarios y rendimiento
 
-Se reutilizan 18 piezas reales del FBX de Niko: torres, hábitats, estaciones, cubiertas, equipos y vehículos. Hay seis distribuciones: **avenida, azotea, callejón, terminal, puente y plaza**, con iluminación, señalización y lluvia según la zona.
+Se reutilizan 18 piezas reales del FBX de Niko: torres, hábitats, estaciones, cubiertas, equipos y vehículos. El skyline usa solo torres; hangares y portales quedan como edificios o muros a pie de calle, no como puertas sueltas en el aire. Hay seis distribuciones: **avenida, azotea, callejón, terminal, puente y plaza**, con iluminación, señalización y lluvia según la zona. Los jutsus tienen siluetas e impactos propios por naturaleza (fuego, agua, rayo, viento, tierra, hielo, sombra, sonido).
 
 Los GLB preparados ocupan aproximadamente **256 KiB (Naruto)** y **1,75 MiB (ciudad)**. El navegador no descarga ni interpreta los DAE, FBX o Blender originales. La ciudad usa instancias y detalles fusionados; los personajes comparten geometría/texturas, pero tienen materiales y esqueletos independientes. Se liberan los recursos de combates y oleadas anteriores.
 
@@ -116,7 +116,8 @@ tests/                 pruebas unitarias y Playwright
 
 - **Ciudad:** Futuristic low poly city by **Niko**, desde los archivos aportados al repositorio.
 - **Personaje:** modelo y texturas de `/Naruto`. Naruto pertenece a sus respectivos titulares; este juego es un homenaje no oficial.
-- **Animación de taijutsu:** poses y clips creados en código para esta integración; no se han descargado animaciones de terceros.
+- **Animación de taijutsu:** poses y clips creados en código para el rig de 93 huesos; no se han descargado clips de Mixamo ni de terceros (no retargetean a este esqueleto). La coreografía imita el kung fu compacto de juegos como Sifu.
+- **Efectos elementales:** geometría generada en el cliente (llamas, cristales, descargas, cuchillas de viento, lanzas de roca, anillos de sonido).
 - **Motor:** Three.js r160, Web Audio, Vite. Fuentes locales Cinzel, Orbitron, Teko y símbolos de Noto Sans JP, distribuidas mediante Fontsource (SIL OFL).
 
 Los archivos externos aportados no incluyen información suficiente para certificar sus licencias. No se atribuye su autoría al proyecto ni se da por hecho que la licencia del código cubra esos assets. Verifica sus permisos antes de redistribuirlos públicamente o usarlos comercialmente.

@@ -503,16 +503,18 @@ export class Game {
       this.audio.sfx(["kick", "airKick", "crouchLight"].includes(ev.move) ? "kick" : "punch");
     } else if (ev.type === "hit") {
       this.audio.sfx("hit");
-      this.fx?.burst(ev.x, ev.y, 0, "#ffe08a", 14, 5);
+      this.fx?.impact(ev.x, ev.y, 0, ev.atk.el1.color, ev.atk.el1.id);
       this.renderer.shake = this.match.shake;
       this.spawnDamage(ev.def, ev.damage);
     } else if (ev.type === "block") {
       this.audio.sfx("block");
+      this.fx?.burst(ev.def.x, ev.def.y + 1.1, 0, "#8ab4ff", 8, 3, "spark");
       this.spawnDamage(ev.def, 0, "#8ab4ff");
     } else if (ev.type === "jump") {
       this.audio.sfx("jump");
     } else if (ev.type === "special") {
       this.audio.sfx(ev.spec.ultimate ? "ultimate" : "whoosh");
+      this.fx?.cast(ev.fighter.x, ev.fighter.y + 1.15, ev.spec.color, ev.spec.element);
       if (ev.spec.ultimate) {
         this.announce(ev.spec.name);
         this.fx?.shockwave(ev.fighter.x, 0.1, ev.spec.color);

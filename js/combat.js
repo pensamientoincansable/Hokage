@@ -154,6 +154,7 @@ export class Match {
     const cost = spec.chakra ?? 24;
     if (f.chakra < cost) return;
     spec.color ||= which === 2 ? f.el2.color : f.el1.color;
+    spec.element ||= which === 2 ? f.elements[1] : f.elements[0];
     f.move = null;
     f.blocking = false;
     f.attackHit = false;
@@ -186,6 +187,7 @@ export class Match {
         chip: spec.chip || 2,
         life: 1.6,
         color,
+        element: spec.element,
         ultimate: !!spec.ultimate,
         statuses,
       });
@@ -213,6 +215,7 @@ export class Match {
         age: 0,
         life: 0.55,
         color,
+        element: spec.element,
         statuses,
       });
     } else if (spec.type === "bind") {

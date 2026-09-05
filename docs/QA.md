@@ -34,7 +34,7 @@ En un entorno que ya tenga Chromium instalado, puede especificarse `PLAYWRIGHT_C
 
 - Instalación limpia con `npm ci`: correcta.
 - Preparación de modelos/retrato/fuentes: correcta; los hashes de procedencia coinciden.
-- `npm test`: **35/35 pruebas aprobadas**.
+- `npm test`: **38/38 pruebas aprobadas**.
 - `npm run build`: correcto, sin FBX/Blender/DAE en el despliegue y con los avisos de licencia incluidos.
 - `npm audit`: **0 vulnerabilidades reportadas** en las dependencias instaladas.
 - Suite completa contra **el build de producción** servido en el puerto 4174: **14/14 pruebas aprobadas** (Chromium 149.0.7827.0, render por software).
@@ -44,10 +44,11 @@ Los resultados anteriores corresponden a ejecución local. Esta PR no añade un 
 
 ## Cobertura automatizada
 
-### Unitarias (35)
+### Unitarias (38)
 
 - Identidad y hashes de originales/derivados; presupuesto de tamaño, cuatro pieles, texturas embebidas y 93 huesos de Naruto.
-- Ventanas de preparación/contacto/recuperación y recuperación de poses.
+- Ventanas de preparación/contacto/recuperación, coreografía de varios fotogramas y recuperación de poses.
+- Skyline sin portales sueltos ni hangares usados como rascacielos; FX elementales se crean y se liberan.
 - Continuidad del ciclo de movimiento; reinicio explícito de un nuevo ataque.
 - Entrada de teclado, aliases, repetición de tecla, formularios, reasignación/cancelación y reparación de asignaciones duplicadas.
 - Propiedad de cada pulsación multitáctil, combinación de teclado + táctil y limpieza al perder el foco.
