@@ -13,6 +13,8 @@ npm run dev
 
 Abre la dirección que muestra Vite (por defecto, `http://localhost:5173`). El servidor escucha en `0.0.0.0`, también para probar desde un móvil de tu red o una vista previa remota.
 
+> ⚠️ **No abras `index.html` haciendo doble clic en el disco** (`file://`): los módulos ES, Three.js y los modelos GLB no pueden cargarse con ese esquema y el juego se quedaría en pantalla negra. Si ocurre, la pantalla mostrará ahora una guía con estos comandos en lugar del fondo negro.
+
 ### Compilar y publicar
 
 ```bash
