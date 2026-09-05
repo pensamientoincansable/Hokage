@@ -1,8 +1,8 @@
 @import "./symbols.css";
-@import "@fontsource/teko/500.css";
-@import "@fontsource/orbitron/500.css";
-@import "@fontsource/orbitron/700.css";
-@import "@fontsource/cinzel/600.css";
+@import url("https://cdn.jsdelivr.net/npm/@fontsource/teko@5.3.0/500.css");
+@import url("https://cdn.jsdelivr.net/npm/@fontsource/orbitron@5.3.0/500.css");
+@import url("https://cdn.jsdelivr.net/npm/@fontsource/orbitron@5.3.0/700.css");
+@import url("https://cdn.jsdelivr.net/npm/@fontsource/cinzel@5.3.0/600.css");
 
 :root {
   --bg: #07080d;
