@@ -498,6 +498,26 @@ export function createNinja(appearance) {
     head.add(mesh(new THREE.SphereGeometry(0.02, 6, 6), mat("#e8c36a", { metalness: 0.8 }), 0.17, -0.01, 0.02));
   }
 
+  // Emblema holográfico — muestra la imagen futurista/robot si existe
+  if (a.textureImage) {
+    try {
+      const loader = new THREE.TextureLoader();
+      const tex = loader.load(a.textureImage, (t) => { t.colorSpace = THREE.SRGBColorSpace; t.needsUpdate = true; });
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const holoMat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.08, side: THREE.DoubleSide, depthWrite: false });
+      const isRobot = a.model === "robot";
+      const plane = new THREE.Mesh(new THREE.PlaneGeometry(isRobot ? 0.62 : 0.58, isRobot ? 0.78 : 0.72), holoMat);
+      plane.position.set(0, isRobot ? 0.16 : 0.18, 0.26);
+      // Ligera inclinación para efecto VF holograma
+      plane.rotation.y = 0;
+      torso.add(plane);
+      // Halo neón detrás
+      const glow = new THREE.Mesh(new THREE.PlaneGeometry(0.72, 0.92), new THREE.MeshBasicMaterial({ color: isRobot ? "#ff3344" : "#3ee0ff", transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false }));
+      glow.position.set(0, 0.16, 0.18);
+      torso.add(glow);
+    } catch {}
+  }
+
   // Aura de dos naturalezas (una por elemento elegido).
   const el = ELEMENTS[a.elements?.[0]] || ELEMENTS.fire;
   const el2 = ELEMENTS[a.elements?.[1]] || ELEMENTS.wind;

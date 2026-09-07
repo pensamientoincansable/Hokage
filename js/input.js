@@ -4,10 +4,10 @@ export const ACTION_LABELS = {
   left: "Izquierda", right: "Derecha", up: "Saltar", down: "Agacharse",
   light: "Puño / barrido", heavy: "Puño fuerte", kick: "Patada",
   special1: "Jutsu 1", special2: "Jutsu 2", ultimate: "Fusión",
-  block: "Guardia", dash: "Dash", pause: "Pausa",
+  block: "Guardia", dash: "Dash", evade: "Esquivar", grab: "Agarre", pause: "Pausa",
 };
-const ALIASES = { left: ["ArrowLeft"], right: ["ArrowRight"], up: ["ArrowUp", "Space"], down: ["ArrowDown"], block: ["ShiftRight"] };
-const keyLabel = (code = "") => ({ Space: "Espacio", Escape: "Esc", ArrowLeft: "←", ArrowRight: "→", ArrowUp: "↑", ArrowDown: "↓", ShiftLeft: "Shift izq.", ShiftRight: "Shift der." }[code] || code.replace(/^Key|^Digit/, ""));
+const ALIASES = { left: ["ArrowLeft"], right: ["ArrowRight"], up: ["ArrowUp", "Space"], down: ["ArrowDown"], block: ["ShiftRight"], evade: ["KeyQ"], grab: ["KeyE", "KeyF"] };
+const keyLabel = (code = "") => ({ Space: "Espacio", Escape: "Esc", ArrowLeft: "←", ArrowRight: "→", ArrowUp: "↑", ArrowDown: "↓", ShiftLeft: "Shift izq.", ShiftRight: "Shift der.", KeyQ: "Q", KeyF: "F", KeyG: "G", KeyH: "H", KeyE: "E" }[code] || code.replace(/^Key|^Digit/, ""));
 
 export class Input {
   constructor({ target = globalThis.window, doc = globalThis.document, now = () => performance.now() } = {}) {

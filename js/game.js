@@ -99,7 +99,12 @@ export class Game {
       this.playerNinja.root.parent?.remove(this.playerNinja.root);
       disposeNinja(this.playerNinja);
     }
-    this.playerNinja = app.model === "custom" ? createNinja(app) : createNaruto(app);
+    // Futurista y robot son variantes cibernéticas; custom sigue procedural; naruto legacy -> futurista
+    if (app.model === "custom" || app.model === "futuristic" || app.model === "robot") {
+      this.playerNinja = createNinja(app);
+    } else {
+      this.playerNinja = createNaruto(app);
+    }
     this.renderer.scene.add(this.playerNinja.root);
   }
 
@@ -243,7 +248,7 @@ export class Game {
   previewMove(name) {
     if (this.mode !== "editor" || !MOVES[name]) return;
     const move = MOVES[name];
-    this.editorPreviewRemaining = move.startup + move.active + move.recovery + 0.3;
+    this.editorPreviewRemaining = move.startup + move.active + move.recovery + 0.35;
     this.playerNinja.animator.play(name, this.editorPreviewRemaining, true);
   }
 
@@ -253,7 +258,7 @@ export class Game {
         UI.toast("Elige dos elementos");
         return;
       }
-      this.draft.name = this.draft.name.trim() || (this.draft.model === "custom" ? "Shinobi" : "Naruto");
+      this.draft.name = this.draft.name.trim() || (this.draft.model === "custom" ? "Shinobi" : "Kage Neon");
       this.save.appearance = structuredClone(this.draft);
       this.persist();
       this.rebuildPlayer(this.save.appearance);
@@ -261,7 +266,9 @@ export class Game {
     }
     if (act === "randomChar") {
       const p = PRESETS[Math.floor(Math.random() * PRESETS.length)];
-      if (this.draft.model === "custom") this.draft = { ...merge(DEFAULT_APPEARANCE, p.appearance), model: "custom" };
+      const baseModel = ["futuristic", "robot", "custom"].includes(this.draft.model) ? this.draft.model : "futuristic";
+      if (["custom", "futuristic", "robot"].includes(this.draft.model)) this.draft = { ...merge(DEFAULT_APPEARANCE, p.appearance), model: baseModel };
+      else this.draft = { ...merge(DEFAULT_APPEARANCE, p.appearance), model: baseModel };
       const e1 = ELEMENT_IDS[Math.floor(Math.random() * ELEMENT_IDS.length)];
       let e2 = ELEMENT_IDS[Math.floor(Math.random() * ELEMENT_IDS.length)];
       if (e2 === e1) e2 = ELEMENT_IDS[(ELEMENT_IDS.indexOf(e1) + 1) % ELEMENT_IDS.length];
@@ -300,8 +307,13 @@ export class Game {
   applyPreset(id) {
     const p = PRESETS.find((x) => x.id === id);
     if (!p) return;
-    this.draft = { ...merge(DEFAULT_APPEARANCE, p.appearance), model: id === "uzumaki" ? "naruto" : "custom" };
-    if (id === "uzumaki") this.draft.name = "Naruto";
+    // Futurista/robot son modelos cibernéticos; uzumaki legacy se mapea a futurista para cumplir petición
+    let model = "custom";
+    if (id === "futuristic") model = "futuristic";
+    else if (id === "robot") model = "robot";
+    else if (id === "uzumaki") model = "futuristic";
+    this.draft = { ...merge(DEFAULT_APPEARANCE, p.appearance), model };
+    if (id === "uzumaki") this.draft.name = "Kage Neon";
     this.refreshEditor();
     this.audio.sfx("ui");
   }
@@ -436,14 +448,21 @@ export class Game {
     this.renderer.scene.add(this.enemyNinja.root);
 
     if (!this.p1Fighter) {
-      this.p1Fighter = new Fighter(this.playerNinja, 1, { hp: 120, damage: 1, speed: 1 });
+      this.p1Fighter = new Fighter(this.playerNinja, 1, { hp: 140, damage: 1, speed: 1 });
+    } else {
+      // Reutiliza luchador pero asegura vida completa al inicio de misión (no entre olas)
+      if (i === 0) {
+        this.p1Fighter.maxHp = 140;
+        this.p1Fighter.hp = 140;
+      }
     }
     const p1 = this.p1Fighter;
-    p1.x = -3.2; p1.y = 0; p1.z = 0; p1.vx = 0; p1.vy = 0; p1.facing = 1;
+    p1.x = -5.2; p1.y = 0; p1.z = 0; p1.vx = 0; p1.vy = 0; p1.facing = 1;
     p1.state = "idle"; p1.timer = 0; p1.animLock = 0; p1.hitstun = 0; p1.blockstun = 0;
     p1.invuln = 0; p1.freeze = 0; p1.flash = 0; p1.coyote = 0; p1.jumpBuffer = 0; p1.walkDir = 0;
-    p1.cd = { special1: 0, special2: 0, ultimate: 0, dash: 0 };
-    p1.dashTime = 0; p1.bufferedAction = null; p1.upHold = false;
+    p1.cd = { special1: 0, special2: 0, ultimate: 0, dash: 0, evade: 0, grab: 0 };
+    p1.dashTime = 0; p1.evadeTime = 0; p1.bufferedAction = null; p1.upHold = false;
+    p1.grabTarget = null; p1.grabbedBy = null; p1.grabTimer = 0; p1.grabHits = 0;
     p1.statuses = [];
     p1.move = null; p1.attackHit = false; p1.alive = true; p1.crouch = false; p1.blocking = false;
     p1.pendingSpec = null;
@@ -501,6 +520,16 @@ export class Game {
   onCombatEvent(ev) {
     if (ev.type === "attack") {
       this.audio.sfx(["kick", "airKick", "crouchLight"].includes(ev.move) ? "kick" : "punch");
+    } else if (ev.type === "evade") {
+      this.audio.sfx("whoosh");
+      this.fx?.burst(ev.fighter.x, 0.2, 0, "#3ee0ff", 8, 3);
+    } else if (ev.type === "grab_attempt") {
+      this.audio.sfx("whoosh");
+    } else if (ev.type === "grab_hit") {
+      this.audio.sfx("hit");
+      this.announce("¡AGARRE!");
+      this.fx?.burst(ev.def.x, 1.0, 0, "#ffdf8a", 10, 4);
+      this.renderer.shake = 0.22;
     } else if (ev.type === "hit") {
       this.audio.sfx("hit");
       this.fx?.burst(ev.x, ev.y, 0, "#ffe08a", 14, 5);
@@ -532,10 +561,12 @@ export class Game {
 
   dropRewards(x) {
     if (!this.match) return;
-    this.match.spawnPickup("chakra", x + 0.5);
-    if (Math.random() < 0.7) this.match.spawnPickup("heal", x - 0.5);
-    const buffs = ["power", "speed", "shield"];
-    if (Math.random() < 0.3) this.match.spawnPickup(buffs[Math.floor(Math.random() * buffs.length)], x + 1.3);
+    // Recompensas con katanas: aspecto de espadas de /media
+    this.match.spawnPickup("chakra", x + 0.6);
+    if (Math.random() < 0.75) this.match.spawnPickup("heal", x - 0.6);
+    const buffs = ["power", "speed", "shield", "blade"];
+    if (Math.random() < 0.55) this.match.spawnPickup(buffs[Math.floor(Math.random() * buffs.length)], x + 1.2);
+    if (Math.random() < 0.22) this.match.spawnPickup("blade", x - 1.1);
   }
 
   handleResult(playerWon) {
@@ -589,8 +620,9 @@ export class Game {
 
   playerInput() {
     const dashTap = this.input.dashTap();
+    const axis = this.input.axis();
     return {
-      axis: this.input.axis(),
+      axis,
       jump: this.input.wasPressed("up"),
       up: this.input.isDown("up"),
       upReleased: this.input.wasReleased("up"),
@@ -604,6 +636,9 @@ export class Game {
       block: this.input.isDown("block"),
       dash: this.input.wasPressed("dash") || dashTap !== 0,
       dashDirection: dashTap,
+      evade: this.input.wasPressed("evade"),
+      evadeDir: axis ? Math.sign(axis) : dashTap || 0,
+      grab: this.input.wasPressed("grab"),
     };
   }
 
