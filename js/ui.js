@@ -88,28 +88,31 @@ export function settingsScreen(settings, binds, input) {
 }
 
 export function editorScreen(app) {
-  const tabs = app.model === "custom" ? ["identidad","rostro","cabello","ojos","marcas","ropa","accesorios","elementos","inspiraciones"] : ["identidad", "elementos"];
+  const isCustomizable = ["custom", "futuristic", "robot"].includes(app.model);
+  const tabs = isCustomizable ? ["identidad","rostro","cabello","ojos","marcas","ropa","accesorios","elementos","inspiraciones"] : ["identidad", "elementos"];
   const tabBtns = tabs.map((t,i)=>`<button class="tab ${i===0?"on":""}" data-tab="${t}">${t}</button>`).join("");
+  const lead = app.model === "futuristic" ? "Ninja futurista — estilo Virtua Fighter, neón y filo cibernético." : app.model === "robot" ? "Ninja robot — chasis de combate, ojos rojos." : app.model === "custom" ? "Crea tu shinobi y prueba sus técnicas." : "Elige tu alias y tus dos naturalezas de chakra.";
   return el(`<div class="screen" id="editor">
     <div class="editor-grid">
       <div class="panel editor-side">
-        <h2 class="gold-title">Dojo Shinobi</h2>
-        <p class="lead">${app.model === "custom" ? "Crea tu shinobi y prueba sus técnicas." : "Naruto original, listo para el combate. Elige tu alias y tus dos naturalezas de chakra."}</p>
-        <div class="animation-preview"><span>PRUEBA EL TAIJUTSU</span><div class="chip-row">
+        <h2 class="gold-title">Dojo Shinobi — VF</h2>
+        <p class="lead">${lead}</p>
+        <div class="animation-preview"><span>PRUEBA EL TAIJUTSU VF</span><div class="chip-row">
           <button class="chip" data-preview="light">Jab</button><button class="chip" data-preview="heavy">Directo</button>
           <button class="chip" data-preview="kick">Circular</button><button class="chip" data-preview="crouchLight">Barrido</button>
           <button class="chip" data-preview="airKick">Aérea</button>
+          <button class="chip" data-preview="evade">Esquive</button><button class="chip" data-preview="grab">Agarre</button>
         </div></div>
         <div class="tabs">${tabBtns}</div>
         <div id="editor-fields"></div>
         <div class="actions">
           <button class="btn primary" data-act="saveChar">Guardar y salir</button>
-          <button class="btn" data-act="randomChar">${app.model === "custom" ? "Aleatorio" : "Chakra aleatorio"}</button>
+          <button class="btn" data-act="randomChar">${isCustomizable ? "Aleatorio" : "Chakra aleatorio"}</button>
           <button class="btn ghost" data-go="menu">Cancelar</button>
         </div>
       </div>
     </div>
-    <div class="editor-hint">ARRASTRA · VISTA 3D · DOS ELEMENTOS OBLIGATORIOS</div>
+    <div class="editor-hint">ARRASTRA · VISTA 3D · DOS ELEMENTOS OBLIGATORIOS · G: AGARRE / H: ESQUIVE</div>
   </div>`);
 }
 
@@ -128,11 +131,16 @@ export function editorFields(tab, app) {
   const HAIR_SWATCHES = ["#f2d36b", "#1a1a1e", "#c81e3a", "#e8d080", "#c8d0d8", "#2a2018", "#7a5cff", "#f2a0c0", "#d8e4ea", "#1e6b3a"];
   const OUTFIT_SWATCHES = ["#2b3548", "#c81e3a", "#1c2430", "#e07020", "#3a2a58", "#1e6b3a", "#c8b090", "#111111", "#d8c8a0", "#0c1018"];
   if (tab === "identidad") {
-    const model = sel("Personaje", [{ id: "naruto", name: "Naruto · modelo original" }, { id: "custom", name: "Shinobi personalizado" }], app.model, "model");
+    const model = sel("Personaje", [{ id: "futuristic", name: "Ninja Futurista — VF" }, { id: "robot", name: "Ninja Robot — serie R" }, { id: "custom", name: "Shinobi personalizado" }, { id: "naruto", name: "Naruto (legacy)" }], app.model, "model");
     const identity = `${model}<div class="field"><label for="fighter-name">Nombre de combate</label><input id="fighter-name" type="text" maxlength="18" data-name value="${escapeHTML(app.name)}" /></div>
       <div class="field"><label for="fighter-height">Altura</label><input id="fighter-height" type="range" min="0.9" max="1.12" step="0.01" data-num="height" value="${app.height}" /></div>`;
-    if (app.model !== "custom") return `${identity}<p class="asset-note">Modelo y texturas de /Naruto. Animación esquelética de taijutsu, sin armas. El aspecto original se conserva; el editor completo sigue disponible en «Shinobi personalizado».</p>`;
-    return `${identity}
+    const note = app.model === "futuristic"
+      ? `<p class="asset-note">Modelo Ninja Futurista (media/ninja futurista.png). Animación VF con anticipación y follow-through, holograma de pecho con textura original.</p>`
+      : app.model === "robot"
+      ? `<p class="asset-note">Modelo Ninja Robot (media/ninja robot.png). Enemigos robotizados con textura original y variaciones sintéticas.</p>`
+      : app.model !== "custom" ? `<p class="asset-note">Legacy Naruto — se redirige automáticamente al Ninja Futurista para cumplir compatibilidad. Usa "Personalizado" para editor completo.</p>` : "";
+    if (!["custom", "futuristic", "robot"].includes(app.model)) return `${identity}${note}`;
+    return `${identity}${note}
       ${sel("Género", [{id:"male",name:"Masculino"},{id:"female",name:"Femenino"},{id:"androgynous",name:"Andrógino"}], app.gender, "gender")}
       ${sel("Complexión", [{id:"slim",name:"Delgado"},{id:"athletic",name:"Atlético"},{id:"broad",name:"Corpulento"}], app.build, "build")}
       ${sel("Aldea", VILLAGES, app.village, "village")}`;
@@ -224,7 +232,8 @@ export function campaignScreen(save) {
 }
 
 export function vsIntro(pName, eLevel) {
-  const portrait = eLevel.portrait || "assets/img/portrait-player.jpg";
+  const portrait = eLevel.portrait || "assets/img/ninja-robot.png";
+  const playerPortrait = eLevel.playerPortrait || (eLevel.playerModel === "robot" ? "assets/img/ninja-robot.png" : eLevel.playerModel === "futuristic" ? "assets/img/ninja-futurista.png" : "assets/img/portrait-player.jpg");
   const sub = eLevel.versus
     ? "COMBATE RÁPIDO"
     : eLevel.boss
@@ -234,13 +243,13 @@ export function vsIntro(pName, eLevel) {
         : `MISIÓN ${String(eLevel.id).padStart(2, "0")}`;
   return el(`<div class="vs-intro">
     <div class="vs-card">
-      <img src="${eLevel.playerModel === "custom" ? "assets/img/portrait-player.jpg" : "assets/img/naruto-portrait.png"}" alt="Tu luchador" />
+      <img src="${playerPortrait}" alt="Tu luchador" onerror="this.src='assets/img/ninja-futurista.png'" />
       <h3>${escapeHTML(pName)}</h3>
       <div class="felems">${(eLevel.playerElems||[]).join(" / ")}</div>
     </div>
     <div class="vs-mark">VS</div>
     <div class="vs-card">
-      <img src="${portrait}" alt="" onerror="this.src='assets/img/portrait-player.jpg'" />
+      <img src="${portrait}" alt="" onerror="this.src='assets/img/ninja-robot.png'" />
       <h3>${eLevel.name}</h3>
       <div class="felems">${sub}</div>
     </div>
@@ -275,7 +284,7 @@ export function hud(p1, p2, level, input) {
     <div class="hud-tools"><button data-act="fullscreen" aria-label="Pantalla completa" title="Pantalla completa"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5m11-5h5v5M4 15v5h5m6 0h5v-5"/></svg></button><button data-act="pause" aria-label="Pausar combate" title="Pausa">Ⅱ</button></div>
     <div class="combo" id="combo">0 <small>HITS</small></div>
     <div class="announcer" id="announcer"></div>
-    <div class="help-strip" id="help">${escapeHTML(input.label("left"))}/${escapeHTML(input.label("right"))} mover · ${escapeHTML(input.label("up"))} salto · ${escapeHTML(input.label("down"))}+${escapeHTML(input.label("light"))} barrido · ${escapeHTML(input.label("block"))} guardia · ${escapeHTML(input.label("light"))}/${escapeHTML(input.label("heavy"))}/${escapeHTML(input.label("kick"))} taijutsu · ${escapeHTML(input.label("special1"))}/${escapeHTML(input.label("special2"))} jutsus · ${escapeHTML(input.label("ultimate"))} fusión · ${escapeHTML(input.label("dash"))} dash · ${escapeHTML(input.label("pause"))} pausa</div>
+    <div class="help-strip" id="help">${escapeHTML(input.label("left"))}/${escapeHTML(input.label("right"))} mover · ${escapeHTML(input.label("up"))} salto · ${escapeHTML(input.label("down"))}+${escapeHTML(input.label("light"))} barrido · ${escapeHTML(input.label("block"))} guardia/protege · ${escapeHTML(input.label("evade"))} esquivar · ${escapeHTML(input.label("grab"))} agarre+flurry · ${escapeHTML(input.label("light"))}/${escapeHTML(input.label("heavy"))}/${escapeHTML(input.label("kick"))} taijutsu VF · ${escapeHTML(input.label("special1"))}/${escapeHTML(input.label("special2"))} jutsus · ${escapeHTML(input.label("ultimate"))} fusión · ${escapeHTML(input.label("dash"))} dash</div>
     <div id="pause-slot"></div>
     <div id="result-slot"></div>
   </div>`);
@@ -313,16 +322,16 @@ export function resultScreen(win, level, versus = false) {
 export function creditsScreen() {
   return el(`<div class="screen overlay"><div class="panel credits">
     <img src="assets/img/logo-ui.webp" width="90" alt="" />
-    <h2 class="gold-title">HOKAGE</h2>
+    <h2 class="gold-title">HOKAGE — VF EDITION v1.2</h2>
     <h3>Diseño</h3>
-    <p>Pelea 2.5D al estilo Fatal Fury · shinobi urbanos inspirados en la era Boruto.</p>
-    <h3>Sistemas</h3>
-    <p>Dos naturalezas de chakra · editor avanzado · 30 misiones · jefe cada 5 niveles.</p>
+    <p>Pelea 2.5D estilo <strong>Virtua Fighter</strong> — Kage-Maru: guardia baja, esquives deslizantes y agarres con flurry rápido.</p>
+    <h3>Sistemas v1.2</h3>
+    <p>• Guardia dedicada + Esquiva invulnerable<br>• Agarre → combo 7 golpes (puños/patadas) ultra rápido<br>• 30 misiones 2–7 olas · robots vida ~30% vs tuya · escenario ±14u alargado</p>
     <h3>Motor</h3>
-    <p>Three.js · Web Audio · animación esquelética de taijutsu.</p>
+    <p>Three.js · Web Audio · animación VF con interpolación suave y respiración.</p>
     <h3>Assets</h3>
-    <p>Ciudad: <strong>Futuristic low poly city by Niko</strong>, a partir del FBX aportado.<br>Personaje: modelo y texturas de la carpeta /Naruto aportada al repositorio.<br>Animaciones de artes marciales creadas para esta integración.</p>
-    <p class="asset-note">Naruto pertenece a sus respectivos titulares. Homenaje no oficial. Consulta assets/models/README.md para la procedencia y las condiciones de redistribución pendientes de verificar.</p>
+    <p>Ciudad: <strong>Futuristic low poly city by Niko</strong>.<br>Jugador: <strong>Ninja Futurista</strong> (media/ninja futurista.png).<br>Enemigos: <strong>Ninja Robot</strong> (media/ninja robot.png).<br>Katanas: <strong>media/descarga (1)-(4).png</strong> como pickups 3D.</p>
+    <p class="asset-note">Homenaje no oficial a VF & Naruto. Ver THIRD_PARTY_NOTICES y assets/models/README.md.</p>
     <div class="actions" style="justify-content:center"><button class="btn primary" data-go="menu">Volver</button><a class="btn ghost" href="THIRD_PARTY_NOTICES.md" target="_blank" rel="noopener">Licencias</a></div>
   </div></div>`);
 }
@@ -338,18 +347,21 @@ export function touchLayer(player) {
           <span class="stick-left" aria-hidden="true">◀</span><span class="stick-right" aria-hidden="true">▶</span>
           <i class="joystick-thumb" aria-hidden="true"></i>
         </div>
-        <span class="touch-hint">↑ SALTO · ↓ AGÁCHATE</span>
+        <span class="touch-hint">↑ SALTO · ↓ AGACHATE · ◇ PROTEGE</span>
       </div>
-      <div class="touch-actions">
+      <div class="touch-actions" style="grid-template-columns: repeat(4, var(--button-size));">
         <button class="touch-btn jutsu" data-input="special1" aria-label="Jutsu 1: ${element1.name}" style="--element:${element1.color}"><b>${element1.kana}</b><span>JUTSU I</span></button>
         <button class="touch-btn jutsu" data-input="special2" aria-label="Jutsu 2: ${element2.name}" style="--element:${element2.color}"><b>${element2.kana}</b><span>JUTSU II</span></button>
         <button class="touch-btn ult" data-input="ultimate" aria-label="Fusión de chakra"><b>奥</b><span>FUSIÓN</span></button>
+        <button class="touch-btn utility" data-input="block" aria-label="Mantener guardia — PROTEGER" style="border-color:#8ab4ff; color:#c9f6ff;"><b>◇</b><span>PROTEGE</span></button>
         <button class="touch-btn attack" data-input="light" aria-label="Puño ligero, barrido al agacharse"><b>PUÑO</b><span>JAB</span></button>
         <button class="touch-btn attack" data-input="heavy" aria-label="Puño fuerte"><b>FUERTE</b><span>DIRECTO</span></button>
         <button class="touch-btn attack" data-input="kick" aria-label="Patada circular o aérea"><b>PATADA</b><span>CIRCULAR</span></button>
-        <button class="touch-btn utility" data-input="block" aria-label="Mantener guardia"><b>◇</b><span>GUARDIA</span></button>
-        <button class="touch-btn utility" data-input="up" aria-label="Saltar, mantener para más altura"><b>↑</b><span>SALTO</span></button>
+        <button class="touch-btn" data-input="grab" aria-label="Agarre + flurry rápido" style="border-color:#ffd27a; color:#ffdf8a; background: linear-gradient(145deg, #6a2a1aee, #2a1e16ef);"><b>投</b><span>AGARRE</span></button>
+        <button class="touch-btn utility" data-input="evade" aria-label="Esquivar — invulnerable" style="border-color:#3ee0ff;"><b>≋</b><span>ESQUIVA</span></button>
+        <button class="touch-btn utility" data-input="up" aria-label="Saltar"><b>↑</b><span>SALTO</span></button>
         <button class="touch-btn utility" data-input="dash" aria-label="Dash"><b>»</b><span>DASH</span></button>
+        <button class="touch-btn utility" data-input="down" aria-label="Agacharse"><b>▽</b><span>AGACHA</span></button>
       </div>
     </div>
   </div>`);

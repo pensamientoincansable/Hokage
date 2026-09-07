@@ -29,16 +29,17 @@ test("30 missions preserve six environments, waves and bosses", () => {
   }
 });
 
-test("old, absent and malformed saves migrate to Naruto without breaking progress", () => {
+test("old, absent and malformed saves migrate to Ninja Futurista without breaking progress", () => {
   const save = normalizeSave({ unlocked: 11, completed: [1, 2, 2, 31, "3"], appearance: { name: "Mi ninja", elements: ["invalid", "fire"], skin: 12, hairColor: "not a color" }, settings: { quality: "unknown", touchScale: 4 } });
-  assert.equal(save.appearance.model, "naruto"); assert.equal(save.appearance.name, "Mi ninja");
+  assert.equal(save.appearance.model, "futuristic"); assert.equal(save.appearance.name, "Mi ninja");
   assert.equal(save.unlocked, 11); assert.deepEqual(save.completed, [1, 2]);
-  assert.equal(save.appearance.elements.length, 2); assert.equal(save.appearance.skin, "#f0c7a0");
+  assert.equal(save.appearance.elements.length, 2); assert.equal(save.appearance.skin, "#d8e0ea");
   assert.equal(save.settings.touchScale, 1.15);
   for (const data of [null, [], 22, "invalid", { appearance: { elements: {} }, settings: [] }]) {
-    assert.equal(normalizeSave(data).appearance.model, "naruto");
+    assert.equal(normalizeSave(data).appearance.model, "futuristic");
   }
   assert.equal(normalizeSave({ appearance: { model: "custom" } }).appearance.model, "custom");
+  assert.equal(normalizeSave({ appearance: { model: "robot" } }).appearance.model, "robot");
 });
 
 test("storage failure does not interrupt gameplay and user names are escaped", () => {

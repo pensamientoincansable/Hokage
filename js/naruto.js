@@ -3,8 +3,17 @@ import { clone } from "three/addons/utils/SkeletonUtils.js";
 import { getAssets } from "./assets.js";
 import { ELEMENTS } from "./config.js";
 import { animateNinja } from "./martial-arts.js";
+import { createNinja } from "./ninja.js";
 
 export function createNaruto(appearance, template = getAssets().naruto) {
+  // Migración Virtua Fighter: Naruto original reemplazado por Ninja Futurista.
+  // Si el save pide naruto, lo redirigimos al nuevo modelo cibernético.
+  if (appearance.model !== "naruto") {
+    return createNinja(appearance);
+  }
+  // Compat: si aún llega como naruto, usar futurista igualmente para cumplir petición
+  const futuristic = { ...appearance, model: "futuristic", textureImage: appearance.textureImage || "assets/img/ninja-futurista.png", portrait: appearance.portrait || "assets/img/ninja-futurista.png", primaryColor: "#0b1622", secondaryColor: "#3ee0ff" };
+  return createNinja(futuristic);
   const root = new THREE.Group();
   root.name = "Naruto-player";
   root.scale.setScalar(appearance.height || 1);

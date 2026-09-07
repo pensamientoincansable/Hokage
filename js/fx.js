@@ -1,5 +1,17 @@
 import * as THREE from "three";
 import { disposeTree } from "./resources.js";
+import { PICKUPS } from "./config.js";
+
+const swordCache = new Map();
+function getSwordTexture(path) {
+  if (!path) return null;
+  if (swordCache.has(path)) return swordCache.get(path);
+  const loader = new THREE.TextureLoader();
+  const tex = loader.load(path, (t) => { t.colorSpace = THREE.SRGBColorSpace; t.needsUpdate = true; });
+  tex.colorSpace = THREE.SRGBColorSpace;
+  swordCache.set(path, tex);
+  return tex;
+}
 
 export class FX {
   constructor(parent, particleScale = 1) {
@@ -44,6 +56,49 @@ export class FX {
 
   pickupMesh(id, color) {
     const g = new THREE.Group();
+    const pickup = PICKUPS[id];
+    const image = pickup?.image;
+    // Si es mejora con espada, usa la imagen de la espada de /media
+    if (image) {
+      const tex = getSwordTexture(image);
+      if (tex) {
+        // Espada flotante — plano double-sided con brillo neón
+        const blade = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.55, 0.95),
+          new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.12, side: THREE.DoubleSide, depthWrite: false })
+        );
+        blade.position.y = 0.18;
+        // Inclinación katanas futuristas
+        blade.rotation.z = 0.18;
+        blade.rotation.y = 0.12;
+        const glow = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.72, 1.12),
+          new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false })
+        );
+        glow.position.y = 0.18;
+        glow.position.z = -0.04;
+        const ring = new THREE.Mesh(
+          new THREE.TorusGeometry(0.28, 0.03, 8, 20),
+          new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false, opacity: 0.78 })
+        );
+        ring.rotation.x = Math.PI / 2;
+        ring.position.y = 0.02;
+        g.add(glow);
+        g.add(blade);
+        g.add(ring);
+        // Partícula superior brillante
+        const tip = new THREE.Mesh(
+          new THREE.SphereGeometry(0.045, 6, 6),
+          new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false, opacity: 0.9 })
+        );
+        tip.position.set(0.12, 0.62, 0);
+        g.add(tip);
+        g.userData.pickup = id;
+        this.parent.add(g);
+        return g;
+      }
+    }
+    // Fallback clásico si no hay textura
     const core = new THREE.Mesh(
       new THREE.IcosahedronGeometry(0.16, 0),
       new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.9, roughness: 0.3 })

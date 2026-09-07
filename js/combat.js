@@ -10,11 +10,18 @@ const AIR_ACCEL = 24;
 const AIR_DRAG = 1.6;
 const AIR_MAX = 6.4;
 
+// Secuencia de agarre VF — 7 golpes rápidos + remate
+const GRAB_SEQUENCE = [
+  MOVES.grabPunch, MOVES.grabPunch, MOVES.grabKick,
+  MOVES.grabPunch, MOVES.grabPunch, MOVES.grabKick,
+  MOVES.grabFinisher,
+];
+
 export class Fighter {
   constructor(ninja, side, stats = {}) {
     this.ninja = ninja;
     this.side = side;
-    this.x = side === 1 ? -3.2 : 3.2;
+    this.x = side === 1 ? -4.5 : 4.5;
     this.y = 0;
     this.z = 0;
     this.vx = 0;
@@ -38,8 +45,9 @@ export class Fighter {
     this.jumpBuffer = 0;
     this.walkDir = 0;
     this.upHold = false;
-    this.cd = { special1: 0, special2: 0, ultimate: 0, dash: 0 };
+    this.cd = { special1: 0, special2: 0, ultimate: 0, dash: 0, evade: 0, grab: 0 };
     this.dashTime = 0;
+    this.evadeTime = 0;
     this.bufferedAction = null;
     this.combo = 0;
     this.air = false;
@@ -53,6 +61,12 @@ export class Fighter {
     this.statuses = [];
     this.buffs = { damage: 0, speed: 0, shield: 0 };
     this.lastHitBy = null;
+    // Agarres
+    this.grabTarget = null;
+    this.grabbedBy = null;
+    this.grabTimer = 0;
+    this.grabHits = 0;
+    this.grabSequence = null;
   }
 
   get el1() {
@@ -115,13 +129,15 @@ export class Match {
   }
 
   face() {
+    // No girar mientras se agarra
+    if (this.p1.grabTarget || this.p2.grabTarget || this.p1.grabbedBy || this.p2.grabbedBy) return;
     const direction = this.p1.x <= this.p2.x ? 1 : -1;
     if (this.p1.alive && this.p1.animLock <= 0) this.p1.facing = direction;
     if (this.p2.alive && this.p2.animLock <= 0) this.p2.facing = -direction;
   }
 
   canAct(f) {
-    return f.alive && f.hitstun <= 0 && f.blockstun <= 0 && f.freeze <= 0 && f.animLock <= 0 && !this.over && this.intro <= 0;
+    return f.alive && f.hitstun <= 0 && f.blockstun <= 0 && f.freeze <= 0 && f.animLock <= 0 && !f.grabbedBy && !f.grabTarget && !this.over && this.intro <= 0;
   }
 
   startMove(f, id) {
@@ -139,6 +155,85 @@ export class Match {
     return true;
   }
 
+  tryEvade(f, dir) {
+    if (!this.canAct(f)) return false;
+    const mv = MOVES.evade;
+    if (f.cd.evade > 0 || f.y > 0.1) return false;
+    f.state = "evade";
+    f.blocking = false;
+    f.crouch = false;
+    f.pendingSpec = null;
+    f.move = null;
+    f.timer = 0;
+    f.animLock = mv.startup + mv.active + mv.recovery;
+    f.attackHit = false;
+    f.invuln = mv.invuln || 0.28;
+    f.evadeTime = mv.active;
+    f.cd.evade = 0.55;
+    // Dirección: si no hay input, esquiva hacia atrás (VF)
+    const direction = dir || -f.facing;
+    f.vx = direction * (mv.distance || 2.6) * 4.0 * f.spd();
+    f.ninja.animator.play("evade", f.animLock, true);
+    this.onEvent({ type: "evade", fighter: f });
+    return true;
+  }
+
+  tryGrab(f) {
+    if (!this.canAct(f)) return false;
+    const mv = MOVES.grab;
+    if (f.cd.grab > 0) return false;
+    if (f.y > 0.2) return false;
+    f.state = "grab";
+    f.blocking = false;
+    f.crouch = false;
+    f.pendingSpec = null;
+    f.move = { ...mv, id: "grab", damage: mv.damage * f.dmgOut() };
+    f.timer = 0;
+    f.animLock = mv.startup + mv.active + mv.recovery;
+    f.attackHit = false;
+    f.cd.grab = 0.65;
+    f.ninja.animator.play("grab", f.animLock, true);
+    this.onEvent({ type: "grab_attempt", fighter: f });
+    return true;
+  }
+
+  startGrabCombo(atk, def) {
+    if (!atk.alive || !def.alive || def.invuln > 0 || atk.grabTarget) return false;
+    atk.attackHit = true;
+    atk.grabTarget = def;
+    def.grabbedBy = atk;
+    atk.grabTimer = 0;
+    atk.grabHits = 0;
+    atk.grabSequence = [...GRAB_SEQUENCE];
+    // Bloquear a ambos
+    def.hitstun = 1.1;
+    def.blockstun = 0;
+    def.blocking = false;
+    def.crouch = false;
+    def.vx = 0; def.vy = 0;
+    atk.vx = 0; atk.vy = 0;
+    atk.state = "grabCombo";
+    def.state = "hurt";
+    atk.timer = 0;
+    def.timer = 0;
+    atk.animLock = 0.95;
+    def.animLock = 0.95;
+    atk.move = null;
+    def.move = null;
+    def.pendingSpec = null;
+    atk.pendingSpec = null;
+    // Posicionar juntos
+    def.x = atk.x + atk.facing * 0.72;
+    def.y = 0;
+    def.facing = -atk.facing;
+    atk.ninja.animator.play("grabCombo", 0.95, true);
+    def.ninja.animator.play("hurt", 0.95, true);
+    this.onEvent({ type: "grab_hit", atk, def });
+    // Primer golpe del agarre (el agarre en sí ya hace daño)
+    this.applyHit(def, atk, MOVES.grab.damage * atk.dmgOut(), MOVES.grab.hitstun, 0.1, false, 0, null);
+    return true;
+  }
+
   special(f, which) {
     if (!this.canAct(f)) return false;
     let spec;
@@ -150,9 +245,9 @@ export class Match {
       spec = { ...f.el2.special, statuses: [f.el2.status] };
     }
     const key = which === 3 ? "ultimate" : which === 1 ? "special1" : "special2";
-    if (f.cd[key] > 0) return;
+    if (f.cd[key] > 0) return false;
     const cost = spec.chakra ?? 24;
-    if (f.chakra < cost) return;
+    if (f.chakra < cost) return false;
     spec.color ||= which === 2 ? f.el2.color : f.el1.color;
     f.move = null;
     f.blocking = false;
@@ -239,13 +334,26 @@ export class Match {
 
   tryHit(atk, def, mv, force = false) {
     if (!atk.alive || !def.alive || def.invuln > 0 || this.over || (atk.attackHit && !force)) return false;
+    if (def.grabbedBy) return false;
     const dx = (def.x - atk.x) * atk.facing;
     const dy = Math.abs(def.y - atk.y);
     if (dx > 0.15 && dx < mv.range && dy < mv.height) {
       atk.attackHit = true;
-      const blocked = def.blocking && def.hitstun <= 0 && def.facing === -atk.facing;
+      const blocked = def.blocking && def.hitstun <= 0 && def.facing === -atk.facing && mv.id !== "grab";
       this.applyHit(def, atk, mv.damage, mv.hitstun, mv.knock, blocked, mv.chip, mv.statuses);
       return true;
+    }
+    return false;
+  }
+
+  tryGrabHit(atk, def) {
+    if (!atk.alive || !def.alive || def.invuln > 0 || atk.attackHit) return false;
+    if (def.grabbedBy || def.hitstun > 0.05) return false;
+    const dx = (def.x - atk.x) * atk.facing;
+    const dy = Math.abs(def.y - atk.y);
+    const mv = MOVES.grab;
+    if (dx > 0.10 && dx < mv.range && dy < mv.height) {
+      return this.startGrabCombo(atk, def);
     }
     return false;
   }
@@ -270,7 +378,6 @@ export class Match {
       def.chakra -= taken;
       atk.chakra = Math.min(100, atk.chakra + taken);
     }
-    // "gust" sólo modifica el empuje, se resuelve en applyHit.
   }
 
   applyHit(def, atk, damage, hitstun, knock, blocked, chip = 1, statuses = null) {
@@ -297,17 +404,25 @@ export class Match {
     }
     def.hp = Math.max(0, def.hp - scaled);
     def.hitstun = hitstun;
-    def.state = "hurt";
-    def.animLock = hitstun;
-    def.ninja.animator.play("hurt", hitstun, true);
+    // Si estaba agarrado, no sobrescribir animación de hurt capturado de forma trivial
+    if (!def.grabbedBy) {
+      def.state = "hurt";
+      def.animLock = hitstun;
+      def.ninja.animator.play("hurt", hitstun, true);
+    } else {
+      def.flash = 0.12;
+    }
     def.move = null;
     def.pendingSpec = null;
     def.bufferedAction = null;
     def.dashTime = 0;
+    def.evadeTime = 0;
     def.walkDir = 0;
     def.blocking = false;
-    def.vx = atk.facing * knock * (statuses && statuses.includes("gust") ? STATUS.gust.knock : 1);
-    def.vy = def.y > 0 ? 2.5 : 1.2;
+    if (!def.grabbedBy) {
+      def.vx = atk.facing * knock * (statuses && statuses.includes("gust") ? STATUS.gust.knock : 1);
+      def.vy = def.y > 0 ? 2.5 : 1.2;
+    }
     def.crouch = false;
     def.flash = 0.12;
     def.lastHitBy = atk;
@@ -316,7 +431,7 @@ export class Match {
     this.combo += 1;
     this.comboTimer = 1.1;
     this.comboRank = this.combo > 10 ? "HOKAGE" : this.combo > 7 ? "SHINOBI" : this.combo > 4 ? "GREAT" : "GOOD";
-    this.hitstop = atk.state === "ultimate" ? 0.14 : 0.055;
+    this.hitstop = atk.state === "ultimate" ? 0.14 : atk.state === "grabCombo" ? 0.02 : 0.055;
     this.shake = 0.18 + Math.min(0.25, scaled * 0.01);
     this.onEvent({ type: "hit", atk, def, damage: scaled, x: def.x, y: def.y + 1.2 });
     if (def.hp <= 0) this.ko(def, atk);
@@ -325,12 +440,17 @@ export class Match {
 
   ko(def, atk) {
     if (this.over || !def.alive) return;
+    // Liberar agarres
+    if (def.grabTarget) { def.grabTarget.grabbedBy = null; def.grabTarget = null; }
+    if (def.grabbedBy) { def.grabbedBy.grabTarget = null; def.grabbedBy.grabTimer = 0; }
+    if (atk.grabTarget === def) { atk.grabTarget = null; atk.grabTimer = 0; }
     def.alive = false;
     def.hp = 0;
     def.state = "ko";
     for (const fighter of [def, atk]) {
       fighter.move = null; fighter.pendingSpec = null; fighter.bufferedAction = null;
-      fighter.walkDir = 0; fighter.dashTime = 0; fighter.statuses = [];
+      fighter.walkDir = 0; fighter.dashTime = 0; fighter.evadeTime = 0; fighter.statuses = [];
+      fighter.grabTimer = 0; fighter.grabTarget = null; fighter.grabbedBy = null;
     }
     atk.state = "win";
     def.ninja.animator.play("ko", 3, true);
@@ -351,6 +471,7 @@ export class Match {
       bob: Math.random() * Math.PI * 2,
       color: P.color,
       name: P.name,
+      image: P.image,
     });
   }
 
@@ -369,17 +490,25 @@ export class Match {
 
   control(f, input, dt = 1 / 60) {
     if (this.intro > 0 || !f.alive || (this.over && !this.interlude)) return;
+    // Si está siendo agarrado, no puede actuar
+    if (f.grabbedBy) return;
+    if (f.grabTarget) {
+      // Durante combo de agarre, no aceptar otros inputs
+      f.walkDir = 0;
+      f.blocking = false;
+      return;
+    }
     f.upHold = !!input.up;
     f.walkDir = 0;
     if (input.jump) f.jumpBuffer = 0.13;
     if (!this.interlude) {
-      const action = ["ultimate", "special2", "special1", "kick", "heavy", "light", "dash"].find((key) => input[key]);
-      if (action) f.bufferedAction = { action, remaining: 0.14, direction: input.dashDirection || Math.sign(input.axis) || f.facing };
+      const action = ["ultimate", "special2", "special1", "kick", "heavy", "light", "dash", "evade", "grab"].find((key) => input[key]);
+      if (action) f.bufferedAction = { action, remaining: 0.16, direction: input.dashDirection || Math.sign(input.axis) || f.facing, evadeDir: input.evadeDir || (input.axis ? Math.sign(input.axis) : -f.facing) };
     }
     if (this.hitstop > 0 || f.hitstun > 0 || f.blockstun > 0 || f.freeze > 0) return;
 
     const axis = Math.max(-1, Math.min(1, input.axis || 0));
-    f.blocking = !!input.block && f.y <= 0 && f.animLock <= 0;
+    f.blocking = !!input.block && f.y <= 0 && f.animLock <= 0 && !f.grabTarget && !f.grabbedBy;
     f.crouch = !!input.down && f.y <= 0 && !f.blocking && f.animLock <= 0;
     if (f.jumpBuffer > 0 && f.animLock <= 0 && (f.y <= 0 || f.coyote > 0)) {
       f.vy = JUMP_VY;
@@ -395,7 +524,7 @@ export class Match {
     if (input.upReleased && f.y > 0.1 && f.vy > 0) f.vy *= 0.45;
 
     if (f.animLock <= 0 && f.bufferedAction && !this.interlude) {
-      const { action, direction } = f.bufferedAction;
+      const { action, direction, evadeDir } = f.bufferedAction;
       f.bufferedAction = null;
       if (action === "ultimate") this.special(f, 3);
       else if (action === "special2") this.special(f, 2);
@@ -414,25 +543,139 @@ export class Match {
         f.cd.dash = 0.48;
         f.invuln = 0.1;
         f.ninja.animator.play("dash", 0.18, true);
+      } else if (action === "evade") {
+        this.tryEvade(f, evadeDir);
+      } else if (action === "grab") {
+        this.tryGrab(f);
       }
     }
     if (f.animLock <= 0) {
       f.move = null;
-      if (f.y > 0) { f.walkDir = axis; f.state = "jump"; }
+      if (f.grabTarget || f.grabbedBy) {
+        // No cambiar estado durante agarre
+      } else if (f.y > 0) { f.walkDir = axis; f.state = "jump"; }
       else if (f.blocking) f.state = "block";
       else if (f.crouch) f.state = "crouch";
       else if (axis) { f.walkDir = axis; f.state = "walk"; }
       else f.state = "idle";
-      f.ninja.animator.play(f.state);
+      if (!f.grabTarget && !f.grabbedBy) f.ninja.animator.play(f.state);
     }
     void dt;
   }
 
+  updateGrabCombo(f, dt) {
+    if (!f.grabTarget || !f.grabTarget.alive) {
+      // Liberar si el objetivo murió
+      if (f.grabTarget) f.grabTarget.grabbedBy = null;
+      f.grabTarget = null;
+      f.grabTimer = 0;
+      f.grabHits = 0;
+      f.animLock = 0.18;
+      f.state = "idle";
+      f.ninja.animator.play("idle");
+      return;
+    }
+    const def = f.grabTarget;
+    // Mantener pegados, desplazamiento VF — deslizamiento sutil
+    const targetX = f.x + f.facing * 0.72;
+    def.x += (targetX - def.x) * 0.35;
+    def.y = 0;
+    def.vx = 0; def.vy = 0;
+    f.vx = 0; f.vy = 0;
+    def.hitstun = Math.max(def.hitstun, 0.25);
+    def.blockstun = 0;
+    f.grabTimer += dt;
+    // Intervalos VF: flurry muy rápido 0.08-0.10s
+    const intervals = [0.09, 0.09, 0.11, 0.09, 0.09, 0.10, 0.16];
+    const nextIdx = f.grabHits;
+    if (nextIdx < GRAB_SEQUENCE.length && f.grabTimer >= intervals[nextIdx]) {
+      f.grabTimer = 0;
+      const mv = GRAB_SEQUENCE[nextIdx];
+      const isFinisher = nextIdx === GRAB_SEQUENCE.length - 1;
+      this.applyHit(def, f, mv.damage * f.dmgOut(), mv.hitstun, mv.knock, false, mv.chip, null);
+      f.grabHits += 1;
+      if (isFinisher) {
+        // Empuje final
+        def.vx = f.facing * mv.knock * 0.8;
+        def.vy = 1.1;
+        this.hitstop = 0.08;
+        this.shake = 0.28;
+        // Liberar tras remate
+        def.grabbedBy = null;
+        f.grabTarget = null;
+        f.animLock = mv.recovery;
+        def.animLock = mv.hitstun + 0.22;
+        f.state = "idle";
+        // Pequeño salto atrás para VF
+        f.vx = -f.facing * 1.8;
+      } else if (f.grabHits >= GRAB_SEQUENCE.length) {
+        def.grabbedBy = null;
+        f.grabTarget = null;
+      }
+    }
+    // Mantener facing
+    def.facing = -f.facing;
+  }
+
   physics(f, dt) {
     if (!f.alive) { f.ninja.update(dt, {}); f.sync(); return; }
+    // Si está siendo agarrado, su física la controla el atacante
+    if (f.grabbedBy) {
+      // Actualizar visuales pero no física propia
+      f.timer += dt;
+      f.animLock = Math.max(0, f.animLock - dt);
+      f.hitstun = Math.max(0, f.hitstun - dt);
+      f.blockstun = Math.max(0, f.blockstun - dt);
+      f.invuln = Math.max(0, f.invuln - dt);
+      f.flash = Math.max(0, f.flash - dt);
+      f.ninja.update(dt, { flash: f.flash > 0, height: f.y, grabbed: true });
+      f.sync();
+      return;
+    }
+    // Si está en combo de agarre, lógica especial
+    if (f.grabTarget) {
+      const previousTimer = f.timer;
+      f.timer += dt;
+      f.animLock = Math.max(0, f.animLock - dt);
+      f.hitstun = Math.max(0, f.hitstun - dt);
+      f.blockstun = Math.max(0, f.blockstun - dt);
+      f.invuln = Math.max(0, f.invuln - dt);
+      f.flash = Math.max(0, f.flash - dt);
+      f.coyote = f.y <= 0 ? 0.1 : Math.max(0, f.coyote - dt);
+      f.jumpBuffer = Math.max(0, f.jumpBuffer - dt);
+      Object.keys(f.cd).forEach((k) => (f.cd[k] = Math.max(0, f.cd[k] - dt)));
+      Object.keys(f.buffs).forEach((k) => (f.buffs[k] = Math.max(0, f.buffs[k] - dt)));
+      for (let i = f.statuses.length - 1; i >= 0; i--) {
+        const s = f.statuses[i];
+        s.until -= dt;
+        if (s.id === "burn" && s.until > 0 && !this.interlude) {
+          s.tick += dt;
+          const interval = 0.5;
+          while (s.tick >= interval) {
+            s.tick -= interval;
+            f.hp = Math.max(0, f.hp - (STATUS.burn.dps || 3) * interval);
+          }
+        }
+        if (s.until <= 0) f.statuses.splice(i, 1);
+      }
+      if (f.hp <= 0 && f.alive) { this.ko(f, f.lastHitBy || this.other(f)); return; }
+      this.updateGrabCombo(f, dt);
+      f.ninja.update(dt, { flash: f.flash > 0, height: f.y, grabbing: true });
+      f.sync();
+      // También actualizar al objetivo agarrado
+      const def = f.grabTarget;
+      if (def) {
+        def.ninja.update(dt, { flash: def.flash > 0, height: def.y, grabbed: true });
+        def.sync();
+      }
+      void previousTimer;
+      return;
+    }
+
     const previousTimer = f.timer;
     f.timer += dt;
     f.dashTime = Math.max(0, f.dashTime - dt);
+    f.evadeTime = Math.max(0, f.evadeTime - dt);
     if (f.bufferedAction) {
       f.bufferedAction.remaining -= dt;
       if (f.bufferedAction.remaining <= 0) f.bufferedAction = null;
@@ -448,7 +691,6 @@ export class Match {
     Object.keys(f.cd).forEach((k) => (f.cd[k] = Math.max(0, f.cd[k] - dt)));
     Object.keys(f.buffs).forEach((k) => (f.buffs[k] = Math.max(0, f.buffs[k] - dt)));
 
-    // Estados persistentes (quemadura DoT, etc.).
     for (let i = f.statuses.length - 1; i >= 0; i--) {
       const s = f.statuses[i];
       s.until -= dt;
@@ -466,7 +708,6 @@ export class Match {
 
     if (f.freeze > 0) f.vx *= 0.25;
 
-    // Gravedad con salto variable (mantener para saltar más alto).
     let g = GRAVITY;
     if (f.y > 0 && f.vy > 0) {
       g = f.upHold ? GRAVITY * 0.58 : GRAVITY * 1.25;
@@ -480,15 +721,15 @@ export class Match {
     }
     f.x = Math.max(ARENA.minX, Math.min(ARENA.maxX, f.x));
 
-    // Movimiento horizontal con aceleración (más natural que velocidad instantánea).
     const spd = f.spd();
-    if (f.dashTime > 0) {
-      // Preserve the dash impulse during its active frames, not ground friction.
+    if (f.dashTime > 0 || f.evadeTime > 0) {
+      // Preservar impulso de dash/evade
+      if (f.evadeTime > 0) f.vx *= 0.985; // leve desaceleración VF
     } else if (f.y <= 0) {
       const target = f.walkDir * WALK_SPEED * spd;
       const rate = f.walkDir !== 0 ? 1 - Math.exp(-GROUND_ACCEL * dt) : 1 - Math.exp(-GROUND_FRICTION * dt);
       f.vx += (target - f.vx) * rate;
-      if (f.blocking) f.vx *= 0.4;
+      if (f.blocking) f.vx *= 0.35;
       if (f.crouch) f.vx = 0;
     } else {
       f.vx += f.walkDir * AIR_ACCEL * spd * dt;
@@ -507,11 +748,19 @@ export class Match {
     }
     if (f.move && f.alive && !this.over) {
       const mv = f.move;
-      if (f.timer >= mv.startup && previousTimer < mv.startup + mv.active) {
-        this.tryHit(f, this.other(f), mv);
+      if (mv.id === "grab") {
+        if (f.timer >= mv.startup && previousTimer < mv.startup + mv.active && !f.attackHit) {
+          this.tryGrabHit(f, this.other(f));
+        }
+      } else {
+        if (f.timer >= mv.startup && previousTimer < mv.startup + mv.active) {
+          this.tryHit(f, this.other(f), mv);
+        }
       }
     }
-    f.ninja.update(dt, { flash: f.flash > 0, height: f.y });
+    const isEvading = f.evadeTime > 0;
+    const isDashing = f.dashTime > 0;
+    f.ninja.update(dt, { flash: f.flash > 0, height: f.y, evade: isEvading, dash: isDashing });
     f.sync();
   }
 
@@ -523,7 +772,7 @@ export class Match {
       const previousX = p.x;
       p.x += p.vx * dt;
       const def = this.other(p.owner);
-      if (def.x >= Math.min(previousX, p.x) - 0.55 - (p.size || 0.3) && def.x <= Math.max(previousX, p.x) + 0.55 + (p.size || 0.3) && Math.abs(p.y - (def.y + 1.1)) < 0.7 && def.invuln <= 0) {
+      if (def.x >= Math.min(previousX, p.x) - 0.55 - (p.size || 0.3) && def.x <= Math.max(previousX, p.x) + 0.55 + (p.size || 0.3) && Math.abs(p.y - (def.y + 1.1)) < 0.7 && def.invuln <= 0 && !def.grabbedBy) {
         const blocked = def.blocking && def.facing !== Math.sign(p.vx);
         this.applyHit(def, p.owner, p.damage, p.hitstun, p.knock, blocked, p.chip, p.statuses);
         this.projectiles.splice(i, 1);
@@ -536,7 +785,7 @@ export class Match {
       const t = this.traps[i];
       t.age += dt;
       const def = this.other(t.owner);
-      if (t.age > 0.18 && Math.abs(def.x - t.x) < 0.7 && def.y < 0.4) {
+      if (t.age > 0.18 && Math.abs(def.x - t.x) < 0.7 && def.y < 0.4 && !def.grabbedBy) {
         this.applyHit(def, t.owner, t.damage, t.hitstun, 3.2, false, 2, t.statuses);
         this.traps.splice(i, 1);
         continue;
@@ -596,13 +845,14 @@ export class Match {
     const left = this.p1.x <= this.p2.x ? this.p1 : this.p2;
     const right = this.other(left);
     const gap = right.x - left.x;
-    if (gap < 0.6 && left.y < 0.3 && right.y < 0.3 && !this.over) {
-      const push = (0.6 - gap) / 2;
+    // Separación mínima, excepto si están agarrados
+    if (!left.grabTarget && !right.grabTarget && !left.grabbedBy && !right.grabbedBy && gap < 0.65 && left.y < 0.3 && right.y < 0.3 && !this.over) {
+      const push = (0.65 - gap) / 2;
       left.x = Math.max(ARENA.minX, left.x - push);
       right.x = Math.min(ARENA.maxX, right.x + push);
-      if (right.x - left.x < 0.6) {
-        if (left.x === ARENA.minX) right.x = left.x + 0.6;
-        else left.x = right.x - 0.6;
+      if (right.x - left.x < 0.65) {
+        if (left.x === ARENA.minX) right.x = left.x + 0.65;
+        else left.x = right.x - 0.65;
       }
     }
     this.p1.sync(); this.p2.sync();

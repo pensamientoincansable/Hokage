@@ -19,8 +19,11 @@ export function normalizeSave(data, settingsDefaults = DEFAULT_SETTINGS) {
     if (!Array.isArray(fallback) && typeof appearance[key] !== typeof fallback) appearance[key] = fallback;
     if ((key.endsWith("Color") || key === "skin" || key === "hairAccent") && !/^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(appearance[key])) appearance[key] = fallback;
   }
-  appearance.model = savedAppearance.model === "custom" ? "custom" : "naruto";
-  appearance.name = typeof appearance.name === "string" ? appearance.name.trim().slice(0, 18) || "Naruto" : "Naruto";
+  const allowedModels = ["naruto", "custom", "futuristic", "robot"];
+  appearance.model = allowedModels.includes(savedAppearance.model) ? savedAppearance.model : "futuristic";
+  // Compatibilidad: saves antiguos con naruto -> futurista
+  if (appearance.model === "naruto") appearance.model = "futuristic";
+  appearance.name = typeof appearance.name === "string" ? appearance.name.trim().slice(0, 18) || "Kage Neon" : "Kage Neon";
   appearance.height = clamp(appearance.height, 0.9, 1.12, 1);
   const elements = [...new Set(Array.isArray(appearance.elements) ? appearance.elements.filter((id) => ELEMENT_IDS.includes(id)) : [])].slice(0, 2);
   for (const id of DEFAULT_APPEARANCE.elements) if (elements.length < 2 && !elements.includes(id)) elements.push(id);

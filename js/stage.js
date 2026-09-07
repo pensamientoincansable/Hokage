@@ -45,16 +45,17 @@ export class Stage {
     this.box(150, 0.3, 110, 0, roof ? -7.5 : water ? -4 : -0.42, -28,
       this.material(water ? "#0d3043" : "#0d1728", { metalness: 0.55, roughness: water ? 0.2 : 0.72 }));
     const deck = this.material("#27384a", { roughness: 0.54, metalness: 0.35 });
-    this.box(21, 0.32, water ? 4.8 : 5.8, 0, -0.16, 0, deck);
-    this.box(21.4, 0.16, 6, 0, -0.4, 0, this.material("#0c1523"));
+    // Arena alargada — 28u ancho (vs 21 anterior) para ±14 límite
+    this.box(28, 0.32, water ? 4.8 : 5.8, 0, -0.16, 0, deck);
+    this.box(28.4, 0.16, 6, 0, -0.4, 0, this.material("#0c1523"));
     const edge = this.glow(this.accent, 1.7);
-    for (const z of [-2.75, 2.75]) this.box(21, 0.035, 0.065, 0, 0.01, z, edge);
+    for (const z of [-2.75, 2.75]) this.box(28, 0.035, 0.065, 0, 0.01, z, edge);
     const seam = this.material("#0d1c2c");
-    for (let x = -9; x <= 9; x += 1.5) {
+    for (let x = -14; x <= 14; x += 1.5) {
       this.box(0.035, 0.015, 5.35, x, 0.013, 0, seam);
-      if (Math.abs(x) < 8) this.box(0.4, 0.018, 0.05, x, 0.026, 1.75, edge);
+      if (Math.abs(x) < 13) this.box(0.4, 0.018, 0.05, x, 0.026, 1.75, edge);
     }
-    for (const x of [-8.5, 8.5]) {
+    for (const x of [-13.5, 13.5]) {
       this.box(0.08, 0.02, 4.2, x, 0.035, 0, this.glow(this.secondary, 1.2));
     }
     this.ring(1.1, 0.018, 0, 0.025, 0, this.accent, 0.28);
@@ -246,8 +247,8 @@ export class Stage {
     const metal = this.material("#334b60");
     for (const z of [-2.9, 2.95]) {
       const front = z > 0;
-      this.box(21, 0.06, 0.08, 0, front ? 0.14 : 0.75, z, metal);
-      for (const x of [-10, -7, -4, 0, 4, 7, 10]) this.box(0.07, front ? 0.15 : 0.8, 0.08, x, front ? 0.075 : 0.4, z, metal);
+      this.box(28, 0.06, 0.08, 0, front ? 0.14 : 0.75, z, metal);
+      for (const x of [-14, -10, -7, -4, 0, 4, 7, 10, 14]) this.box(0.07, front ? 0.15 : 0.8, 0.08, x, front ? 0.075 : 0.4, z, metal);
     }
   }
 

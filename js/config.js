@@ -1,5 +1,5 @@
-export const VERSION = "1.1.0";
-export const ARENA = { minX: -8.4, maxX: 8.4, ground: 0 };
+export const VERSION = "1.2.0";
+export const ARENA = { minX: -14, maxX: 14, ground: 0 };
 export const ROUND_TIME = 99;
 
 export const DIFFICULTY = {
@@ -11,8 +11,8 @@ export const DIFFICULTY = {
 
 export const QUALITY = {
   baja: { shadows: false, bloom: false, buildings: 12, particles: 0.35, pixelRatio: 1, shadowMap: 512 },
-  media: { shadows: true, bloom: false, buildings: 18, particles: 0.65, pixelRatio: 1.25, shadowMap: 768 },
-  alta: { shadows: true, bloom: true, buildings: 26, particles: 1, pixelRatio: 1.75, shadowMap: 1024 },
+  media: { shadows: true, bloom: false, buildings: 22, particles: 0.65, pixelRatio: 1.25, shadowMap: 768 },
+  alta: { shadows: true, bloom: true, buildings: 32, particles: 1, pixelRatio: 1.75, shadowMap: 1024 },
 };
 
 export const VILLAGES = [
@@ -213,7 +213,6 @@ export const ELEMENTS = {
 export const ELEMENT_IDS = Object.keys(ELEMENTS);
 
 // Efecto "co-relativo" (correspondiente) de cada naturaleza de chakra.
-// Se aplica al golpear con el jutsu especial y se combina en el ultimátum.
 export const STATUS = {
   burn: { id: "burn", name: "Quemadura", kana: "火", color: "#ff4d1a", duration: 3, dps: 3 },
   soak: { id: "soak", name: "Empapado", kana: "水", color: "#3aa0ff", duration: 2.5, slow: 0.72 },
@@ -239,12 +238,20 @@ Object.values(ELEMENTS).forEach((e) => {
   e.status = ELEMENT_STATUS[e.id];
 });
 
+export const SWORD_IMAGES = [
+  "assets/img/sword-1.png",
+  "assets/img/sword-2.png",
+  "assets/img/sword-3.png",
+  "assets/img/sword-4.png",
+];
+
 export const PICKUPS = {
-  heal: { id: "heal", name: "Vitalidad", color: "#5dff9f", heal: 25 },
-  chakra: { id: "chakra", name: "Chakra", color: "#3ee0ff", chakra: 40 },
-  power: { id: "power", name: "Poder x1.5", color: "#ff6a2a", buff: { damage: 1.5, time: 8 } },
-  speed: { id: "speed", name: "Velocidad x1.35", color: "#e8c36a", buff: { speed: 1.35, time: 8 } },
-  shield: { id: "shield", name: "Escudo 6s", color: "#c9f6ff", buff: { shield: 6 } },
+  heal: { id: "heal", name: "Vitalidad", color: "#5dff9f", heal: 25, image: "assets/img/sword-3.png" },
+  chakra: { id: "chakra", name: "Chakra", color: "#3ee0ff", chakra: 40, image: "assets/img/sword-4.png" },
+  power: { id: "power", name: "Katana Ígnea x1.5", color: "#ff6a2a", buff: { damage: 1.5, time: 10 }, image: "assets/img/sword-1.png" },
+  speed: { id: "speed", name: "Katana Viento x1.35", color: "#e8c36a", buff: { speed: 1.35, time: 10 }, image: "assets/img/sword-2.png" },
+  shield: { id: "shield", name: "Escudo Prisma 6s", color: "#c9f6ff", buff: { shield: 6 }, image: "assets/img/sword-4.png" },
+  blade: { id: "blade", name: "Filo Futurista", color: "#ffdf8a", buff: { damage: 1.25, speed: 1.15, time: 12 }, heal: 12, image: "assets/img/sword-1.png" },
 };
 
 export function fusionUltimate(a, b) {
@@ -285,47 +292,108 @@ export function fusionUltimate(a, b) {
   return { ...base, chakra: 100, cooldown: 8, hitstun: 0.85, ultimate: true, statuses };
 }
 
+// Apariencia futurista por defecto — ninja cibernético de neón
 export const DEFAULT_APPEARANCE = {
-  model: "naruto",
-  name: "Naruto",
+  model: "futuristic",
+  name: "Kage Neon",
   gender: "androgynous",
   height: 1,
   build: "athletic",
-  skin: "#f0c7a0",
+  skin: "#d8e0ea",
   faceShape: "sharp",
-  eyeStyle: "normal",
-  eyeColor: "#2a6adf",
+  eyeStyle: "bar",
+  eyeColor: "#3ee0ff",
   eyebrow: "sharp",
-  markings: "whiskers",
-  markingColor: "#3a2418",
-  hairStyle: "messy",
-  hairColor: "#f2d36b",
-  hairAccent: "#2a2a2a",
-  headband: true,
-  village: "leaf",
-  mask: "none",
-  outfit: "hoodie",
-  primaryColor: "#2b3548",
-  secondaryColor: "#e8c36a",
-  accentColor: "#3ee0ff",
-  pants: "slim",
-  shoes: "sneakers",
+  markings: "karma",
+  markingColor: "#0ff0ff",
+  hairStyle: "undercut",
+  hairColor: "#0a1620",
+  hairAccent: "#3ee0ff",
+  headband: false,
+  village: "none",
+  mask: "cyber",
+  outfit: "tactical",
+  primaryColor: "#0b1622",
+  secondaryColor: "#3ee0ff",
+  accentColor: "#ff3b6a",
+  pants: "tactical",
+  shoes: "boots",
   cloak: false,
   scarf: false,
-  earrings: true,
-  gloves: false,
+  earrings: false,
+  gloves: true,
   goggles: false,
-  scroll: true,
-  elements: ["wind", "lightning"],
+  scroll: false,
+  elements: ["lightning", "wind"],
+  portrait: "assets/img/ninja-futurista.png",
+  textureImage: "assets/img/ninja-futurista.png",
+};
+
+export const ROBOT_APPEARANCE = {
+  model: "robot",
+  name: "Ninja Robot",
+  gender: "androgynous",
+  height: 1.02,
+  build: "athletic",
+  skin: "#8a9aaa",
+  faceShape: "sharp",
+  eyeStyle: "gold",
+  eyeColor: "#ff3344",
+  eyebrow: "none",
+  markings: "karma",
+  markingColor: "#ff3344",
+  hairStyle: "buzz",
+  hairColor: "#1a1a1e",
+  hairAccent: "#ff3344",
+  headband: false,
+  village: "none",
+  mask: "cyber",
+  outfit: "tactical",
+  primaryColor: "#1a2330",
+  secondaryColor: "#ff3344",
+  accentColor: "#c8d0d8",
+  pants: "tactical",
+  shoes: "boots",
+  cloak: false,
+  scarf: false,
+  earrings: false,
+  gloves: true,
+  goggles: false,
+  scroll: false,
+  portrait: "assets/img/ninja-robot.png",
+  textureImage: "assets/img/ninja-robot.png",
+  elements: ["lightning", "shadow"],
 };
 
 export const PRESETS = [
+  {
+    id: "futuristic",
+    name: "Ninja Futurista",
+    desc: "Neón cibernético, filo y velocidad VF",
+    appearance: {
+      ...DEFAULT_APPEARANCE,
+      name: "Kage Neon",
+      model: "futuristic",
+      elements: ["lightning", "wind"],
+    },
+  },
+  {
+    id: "robot",
+    name: "Ninja Robot",
+    desc: "Chasis de guerra, ojos rojos",
+    appearance: {
+      ...ROBOT_APPEARANCE,
+      name: "Unidad R-07",
+      elements: ["lightning", "shadow"],
+    },
+  },
   {
     id: "uzumaki",
     name: "Uzumaki Rubio",
     desc: "Pinchos, bigotes y naranja de guerra",
     appearance: {
       name: "Naruto-kei",
+      model: "custom",
       gender: "male",
       skin: "#f3c49a",
       hairStyle: "spiky",
@@ -342,6 +410,7 @@ export const PRESETS = [
       shoes: "sandals",
       elements: ["wind", "fire"],
       cloak: false,
+      portrait: "assets/img/naruto-portrait.png",
     },
   },
   {
@@ -350,6 +419,7 @@ export const PRESETS = [
     desc: "Cabello largo, tomoe y azul noche",
     appearance: {
       name: "Sasuke-kei",
+      model: "custom",
       gender: "male",
       skin: "#e8b894",
       hairStyle: "longback",
@@ -372,6 +442,7 @@ export const PRESETS = [
     desc: "Corte urbano, azul y marcas",
     appearance: {
       name: "Boruto-kei",
+      model: "custom",
       gender: "male",
       skin: "#f0c7a0",
       hairStyle: "messy",
@@ -394,6 +465,7 @@ export const PRESETS = [
     desc: "Bob, gafas y tomoe",
     appearance: {
       name: "Sarada-kei",
+      model: "custom",
       gender: "female",
       skin: "#eab392",
       hairStyle: "shortbob",
@@ -415,6 +487,7 @@ export const PRESETS = [
     desc: "Cabello liso, ojos de sabio",
     appearance: {
       name: "Mitsuki-kei",
+      model: "custom",
       gender: "androgynous",
       skin: "#f6e0c8",
       hairStyle: "smooth",
@@ -436,6 +509,7 @@ export const PRESETS = [
     desc: "Undercut, sello y negro",
     appearance: {
       name: "Kawaki-kei",
+      model: "custom",
       gender: "male",
       skin: "#e0b090",
       hairStyle: "undercut",
@@ -459,6 +533,7 @@ export const PRESETS = [
     desc: "Largo oscuro y perla",
     appearance: {
       name: "Hinata-kei",
+      model: "custom",
       gender: "female",
       skin: "#f0c8b0",
       hairStyle: "flow",
@@ -479,6 +554,7 @@ export const PRESETS = [
     desc: "Rosa corto y fuerza",
     appearance: {
       name: "Sakura-kei",
+      model: "custom",
       gender: "female",
       skin: "#f3c2b0",
       hairStyle: "shortbob",
@@ -499,6 +575,7 @@ export const PRESETS = [
     desc: "Mechón cubierto y rayo",
     appearance: {
       name: "Kakashi-kei",
+      model: "custom",
       gender: "male",
       skin: "#e8b894",
       hairStyle: "silver",
@@ -519,6 +596,7 @@ export const PRESETS = [
     desc: "Coleta, capa y tomoe",
     appearance: {
       name: "Itachi-kei",
+      model: "custom",
       gender: "male",
       skin: "#e0b090",
       hairStyle: "ponytail",
@@ -540,6 +618,7 @@ export const PRESETS = [
     desc: "Cabello salvaje y kanji",
     appearance: {
       name: "Gaara-kei",
+      model: "custom",
       gender: "male",
       skin: "#f0c8a8",
       hairStyle: "wild",
@@ -560,6 +639,7 @@ export const PRESETS = [
     desc: "Bowl, cejas y taijutsu",
     appearance: {
       name: "Lee-kei",
+      model: "custom",
       gender: "male",
       skin: "#e8b080",
       hairStyle: "bowl",
@@ -580,6 +660,7 @@ export const PRESETS = [
     desc: "Largo y perla",
     appearance: {
       name: "Neji-kei",
+      model: "custom",
       gender: "male",
       skin: "#e8c0a0",
       hairStyle: "flow",
@@ -600,6 +681,7 @@ export const PRESETS = [
     desc: "Coletas y viento",
     appearance: {
       name: "Temari-kei",
+      model: "custom",
       gender: "female",
       skin: "#f0c8a0",
       hairStyle: "twin",
@@ -619,6 +701,7 @@ export const PRESETS = [
     desc: "Vendaje y agua",
     appearance: {
       name: "Zabuza-kei",
+      model: "custom",
       gender: "male",
       skin: "#d8b090",
       hairStyle: "flow",
@@ -639,6 +722,7 @@ export const PRESETS = [
     desc: "Corte táctico y rayo",
     appearance: {
       name: "Darui-kei",
+      model: "custom",
       gender: "male",
       skin: "#6a4a32",
       hairStyle: "undercut",
@@ -655,53 +739,59 @@ export const PRESETS = [
 ];
 
 export const STAGES = [
-  { id: "street", name: "Avenida Konoha-Neo", palette: ["#1b2230", "#c81e3a", "#3ee0ff"], rain: true },
-  { id: "rooftop", name: "Azoteas de Hokage", palette: ["#12151c", "#e8c36a", "#ff6a2a"], rain: false },
-  { id: "alley", name: "Callejón de Neón", palette: ["#0c0d14", "#e85cff", "#3ee0ff"], rain: true },
-  { id: "station", name: "Terminal del Maglev", palette: ["#151820", "#3ee0ff", "#e8c36a"], rain: false },
-  { id: "bridge", name: "Puente del Trueno", palette: ["#101820", "#c9f6ff", "#3aa0ff"], rain: true },
-  { id: "plaza", name: "Plaza del Monumento", palette: ["#1a140e", "#e8c36a", "#c81e3a"], rain: false },
+  { id: "street", name: "Avenida Konoha-Neo", palette: ["#1b2230", "#c81e3a", "#3ee0ff"], rain: true, length: 28 },
+  { id: "rooftop", name: "Azoteas de Hokage", palette: ["#12151c", "#e8c36a", "#ff6a2a"], rain: false, length: 30 },
+  { id: "alley", name: "Callejón de Neón", palette: ["#0c0d14", "#e85cff", "#3ee0ff"], rain: true, length: 28 },
+  { id: "station", name: "Terminal del Maglev", palette: ["#151820", "#3ee0ff", "#e8c36a"], rain: false, length: 32 },
+  { id: "bridge", name: "Puente del Trueno", palette: ["#101820", "#c9f6ff", "#3aa0ff"], rain: true, length: 34 },
+  { id: "plaza", name: "Plaza del Monumento", palette: ["#1a140e", "#e8c36a", "#c81e3a"], rain: false, length: 30 },
 ];
 
 const ENEMY_NAMES = [
-  "Genin Callejero", "Kunoichi de Distrito", "ANBU Renegado", "Chunin del Metro",
-  "Asesino de Tejados", "Cazador de Scrolls", "Mercenario de Lluvia", "Espía de Sonido",
-  "Jōnin Caído", "Guardia de Neón", "Bandido de Arena", "Ninja de Construcción",
-  "Sicario del Puerto", "Hermana de Niebla", "Ronin Urbano", "Operativo Cloud",
-  "Cazador de Bestias", "Médico Negro", "Doble de Clan", "Sello Roto",
-  "Patrulla Nocturna", "Ladrón de Chakra", "Infiltrado", "Centinela",
+  "Unidad R-01", "Unidad R-02", "NX-Cazador", "RX-Sombra", "MK-Neón",
+  "Androide Táctico", "Dron Kunoichi", "ANBU Robótico", "Cazador Sintético",
+  "Centinela Cromo", "Bandido Cibernético", "Ronin de Acero",
+  "Sicario Cuántico", "Hermana de Niebla MK-II", "Operativo Cloud-X",
+  "Cazador de Bestias 9", "Médico Negro V2", "Doble de Clan Sintético",
+  "Sello Roto 0.1", "Patrulla Nocturna R", "Ladrón de Chakra Mk-IV",
+  "Infiltrado NX", "Centinela Prisma", "Espectro de Neón",
 ];
 
 const BOSSES = [
   {
     level: 5,
-    name: "Akari Enra",
-    title: "Llama del Distrito",
+    name: "Akari Enra • R-EX",
+    title: "Llama del Distrito — Núcleo",
     portrait: "assets/img/boss-1.jpg",
     elements: ["fire", "earth"],
     appearance: {
       name: "Akari Enra",
+      model: "robot",
       gender: "female",
       hairStyle: "wild",
       hairColor: "#c81e3a",
       eyeStyle: "gold",
       eyeColor: "#ff6a2a",
       markings: "facepaint",
-      outfit: "jacket",
+      outfit: "tactical",
       primaryColor: "#1a1010",
       secondaryColor: "#ff4d1a",
-      village: "leaf",
+      village: "none",
+      mask: "cyber",
+      portrait: "assets/img/boss-1.jpg",
+      textureImage: "assets/img/ninja-robot.png",
       elements: ["fire", "earth"],
     },
   },
   {
     level: 10,
-    name: "Raijin Kuro",
+    name: "Raijin Kuro • Volt",
     title: "Asesino de Neón",
     portrait: "assets/img/boss-2.jpg",
     elements: ["lightning", "shadow"],
     appearance: {
       name: "Raijin Kuro",
+      model: "robot",
       gender: "male",
       hairStyle: "silver",
       hairColor: "#c8d0d8",
@@ -712,38 +802,44 @@ const BOSSES = [
       primaryColor: "#0c1018",
       secondaryColor: "#3ee0ff",
       village: "cloud",
+      portrait: "assets/img/boss-2.jpg",
+      textureImage: "assets/img/ninja-robot.png",
       elements: ["lightning", "shadow"],
     },
   },
   {
     level: 15,
-    name: "Yuki Shizuku",
-    title: "Fantasma de Niebla",
+    name: "Yuki Shizuku • Gelo",
+    title: "Fantasma de Niebla Sintética",
     portrait: "assets/img/boss-3.jpg",
     elements: ["water", "ice"],
     appearance: {
       name: "Yuki Shizuku",
+      model: "robot",
       gender: "female",
       hairStyle: "flow",
       hairColor: "#b8e7ff",
       eyeStyle: "pale",
       eyeColor: "#e8f8ff",
-      outfit: "cloak",
-      cloak: true,
-      primaryColor: "#d8eef8",
+      outfit: "tactical",
+      cloak: false,
+      primaryColor: "#0e1a22",
       secondaryColor: "#3aa0ff",
       village: "mist",
+      portrait: "assets/img/boss-3.jpg",
+      textureImage: "assets/img/ninja-robot.png",
       elements: ["water", "ice"],
     },
   },
   {
     level: 20,
-    name: "Oto no Maō",
-    title: "Señor del Sonido",
+    name: "Oto no Maō • Eco",
+    title: "Señor del Sonido — Matriz",
     portrait: "assets/img/boss-4.jpg",
     elements: ["sound", "wind"],
     appearance: {
       name: "Oto no Maō",
+      model: "robot",
       gender: "male",
       hairStyle: "crown",
       hairColor: "#7a5cff",
@@ -753,49 +849,57 @@ const BOSSES = [
       primaryColor: "#1a1020",
       secondaryColor: "#e85cff",
       village: "sound",
+      portrait: "assets/img/boss-4.jpg",
+      textureImage: "assets/img/ninja-robot.png",
       elements: ["sound", "wind"],
     },
   },
   {
     level: 25,
-    name: "Kawa",
-    title: "El Interior",
+    name: "Kawa • Núcleo",
+    title: "El Interior — Proto",
     portrait: "assets/img/boss-5.jpg",
     elements: ["earth", "lightning"],
     appearance: {
       name: "Kawa",
+      model: "robot",
       gender: "male",
       hairStyle: "undercut",
       hairColor: "#2a2420",
       eyeStyle: "gold",
       markings: "karma",
-      outfit: "hoodie",
+      outfit: "tactical",
       primaryColor: "#111",
       secondaryColor: "#8a8a90",
       mask: "cyber",
       village: "none",
+      portrait: "assets/img/boss-5.jpg",
+      textureImage: "assets/img/ninja-robot.png",
       elements: ["earth", "lightning"],
     },
   },
   {
     level: 30,
-    name: "Hokage Sombra",
-    title: "El Último Hat",
+    name: "Hokage Sombra • Origen",
+    title: "El Último Hat — Réplica",
     portrait: "assets/img/boss-6.jpg",
     elements: ["fire", "wind"],
     appearance: {
       name: "Hokage Sombra",
+      model: "robot",
       gender: "male",
       hairStyle: "spiky",
       hairColor: "#f2d36b",
       eyeStyle: "tomoe",
       eyeColor: "#c81e3a",
       markings: "whiskers",
-      outfit: "cloak",
-      cloak: true,
-      primaryColor: "#c81e3a",
-      secondaryColor: "#e8c36a",
+      outfit: "tactical",
+      cloak: false,
+      primaryColor: "#0d1118",
+      secondaryColor: "#c81e3a",
       village: "leaf",
+      portrait: "assets/img/boss-6.jpg",
+      textureImage: "assets/img/ninja-robot.png",
       elements: ["fire", "wind"],
       height: 1.08,
     },
@@ -821,12 +925,12 @@ export function buildLevels() {
         portrait: boss.portrait,
         stage,
         enemy: {
-          ...DEFAULT_APPEARANCE,
+          ...ROBOT_APPEARANCE,
           ...boss.appearance,
           elements: boss.elements,
         },
         stats: {
-          hp: 120 + i * 5,
+          hp: 110 + i * 4,
           damage: 1.0 + i * 0.024,
           speed: 1.05,
           ai: "boss",
@@ -834,34 +938,29 @@ export function buildLevels() {
       });
       continue;
     }
-    const r = seeded(i);
-    const r2 = seeded(i + 17);
-    const preset = PRESETS[Math.floor(r * PRESETS.length)];
     const e1 = ELEMENT_IDS[Math.floor(seeded(i + 3) * ELEMENT_IDS.length)];
     let e2 = ELEMENT_IDS[Math.floor(seeded(i + 9) * ELEMENT_IDS.length)];
     if (e2 === e1) e2 = ELEMENT_IDS[(ELEMENT_IDS.indexOf(e1) + 1) % ELEMENT_IDS.length];
+    // Vida muy corta: cada robot tiene ~30-40% de tu vida, pero son muchos
+    const waveCount = i <= 4 ? 2 : i <= 10 ? 3 : i <= 16 ? 4 : i <= 22 ? 5 : i <= 28 ? 6 : 7;
     levels.push({
       id: i,
       boss: false,
       name: ENEMY_NAMES[(i - 1) % ENEMY_NAMES.length],
       title: `Misión ${String(i).padStart(2, "0")}`,
-      portrait: "assets/img/portrait-player.jpg",
+      portrait: "assets/img/ninja-robot.png",
       stage,
       enemy: {
-        ...DEFAULT_APPEARANCE,
-        ...preset.appearance,
+        ...ROBOT_APPEARANCE,
         name: ENEMY_NAMES[(i - 1) % ENEMY_NAMES.length],
-        hairColor: preset.appearance.hairColor,
-        primaryColor: r > 0.5 ? "#1a2030" : preset.appearance.primaryColor,
-        height: 0.94 + r2 * 0.12,
+        height: 0.96 + seeded(i + 17) * 0.08,
         elements: [e1, e2],
       },
       stats: {
-        // Olas de enemigos: más rivales, cada uno con menos vida.
-        hp: 48 + i * 2,
-        damage: 0.8 + i * 0.018,
-        speed: 0.95 + i * 0.006,
-        waves: i <= 8 ? 2 : i <= 18 ? 3 : 4,
+        hp: 34 + Math.floor(i * 1.45),
+        damage: 0.72 + i * 0.016,
+        speed: 0.92 + i * 0.006,
+        waves: waveCount,
         ai: "grunt",
       },
     });
@@ -872,7 +971,7 @@ export function buildLevels() {
 export const LEVELS = buildLevels();
 
 // Construye las olas de una misión. Cada misión de campaña se divide en
-// varios enemigos (menos vida cada uno) salvo los jefes, que luchan solos.
+// varios robots (menos vida cada uno) salvo los jefes, que luchan solos.
 export function buildWaves(level, versus = false) {
   if (versus) {
     return [
@@ -903,21 +1002,20 @@ export function buildWaves(level, versus = false) {
   const count = level.stats.waves || 2;
   const waves = [];
   for (let w = 0; w < count; w++) {
-    const preset = PRESETS[Math.floor(seeded(level.id * 13 + w * 3) * PRESETS.length)];
     const e1 = ELEMENT_IDS[Math.floor(seeded(level.id * 5 + w * 11) * ELEMENT_IDS.length)];
     let e2 = ELEMENT_IDS[Math.floor(seeded(level.id * 7 + w * 17) * ELEMENT_IDS.length)];
     if (e2 === e1) e2 = ELEMENT_IDS[(ELEMENT_IDS.indexOf(e1) + 1 + w) % ELEMENT_IDS.length];
     const name = ENEMY_NAMES[Math.floor(seeded(level.id * 3 + w * 19) * ENEMY_NAMES.length)];
+    const variation = seeded(level.id * 13 + w) > 0.6;
     waves.push({
       name,
       title: `Misión ${String(level.id).padStart(2, "0")}`,
       appearance: {
-        ...DEFAULT_APPEARANCE,
-        ...preset.appearance,
+        ...ROBOT_APPEARANCE,
         name,
-        hairColor: preset.appearance.hairColor,
-        primaryColor: seeded(level.id + w) > 0.5 ? "#1a2030" : preset.appearance.primaryColor,
-        height: 0.92 + seeded(level.id + w + 5) * 0.14,
+        primaryColor: variation ? "#1d2a3a" : ROBOT_APPEARANCE.primaryColor,
+        secondaryColor: variation ? "#ff6a3a" : ROBOT_APPEARANCE.secondaryColor,
+        height: 0.94 + seeded(level.id + w + 5) * 0.10,
         elements: [e1, e2],
       },
       hp: level.stats.hp,
@@ -952,6 +1050,8 @@ export const DEFAULT_BINDS = {
   ultimate: "KeyO",
   block: "ShiftLeft",
   dash: "KeyP",
+  evade: "KeyH",
+  grab: "KeyG",
   pause: "Escape",
 };
 
@@ -961,4 +1061,9 @@ export const MOVES = {
   kick: { startup: 0.15, active: 0.12, recovery: 0.22, damage: 9, hitstun: 0.33, blockstun: 0.17, knock: 3.0, range: 1.6, height: 0.85, chip: 1.5 },
   crouchLight: { startup: 0.12, active: 0.1, recovery: 0.2, damage: 7, hitstun: 0.28, blockstun: 0.13, knock: 1.8, range: 1.45, height: 0.7, chip: 1 },
   airKick: { startup: 0.1, active: 0.15, recovery: 0.16, damage: 8, hitstun: 0.29, blockstun: 0.11, knock: 2.3, range: 1.38, height: 0.9, chip: 1 },
+  evade: { startup: 0.06, active: 0.22, recovery: 0.14, damage: 0, hitstun: 0, blockstun: 0, knock: 0, range: 0, height: 0, chip: 0, invuln: 0.3, distance: 2.6 },
+  grab: { startup: 0.12, active: 0.12, recovery: 0.28, damage: 5, hitstun: 0.45, blockstun: 0, knock: 0.2, range: 1.45, height: 1.3, chip: 0 },
+  grabPunch: { startup: 0.04, active: 0.04, recovery: 0.02, damage: 4, hitstun: 0.18, blockstun: 0.06, knock: 0.2, range: 1.25, height: 1.15, chip: 0 },
+  grabKick: { startup: 0.05, active: 0.05, recovery: 0.03, damage: 5, hitstun: 0.2, blockstun: 0.07, knock: 0.5, range: 1.3, height: 1.0, chip: 0 },
+  grabFinisher: { startup: 0.08, active: 0.08, recovery: 0.22, damage: 9, hitstun: 0.4, blockstun: 0.15, knock: 4.5, range: 1.45, height: 1.2, chip: 1 },
 };
